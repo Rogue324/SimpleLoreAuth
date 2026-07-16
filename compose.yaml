@@ -1,0 +1,43 @@
+services:
+  lore-auth:
+    build: .
+    restart: unless-stopped
+    environment:
+      LORE_AUTH_PUBLIC_BASE_URL: ${LORE_AUTH_PUBLIC_BASE_URL:?set the public HTTPS URL}
+      LORE_AUTH_ISSUER: ${LORE_AUTH_ISSUER:?set the JWT issuer}
+      LORE_AUTH_AUDIENCE: ${LORE_AUTH_AUDIENCE:-lore-service}
+      LORE_AUTH_ENVIRONMENT: ${LORE_AUTH_ENVIRONMENT:-local}
+      LORE_AUTH_TOKEN_TTL_SECONDS: ${LORE_AUTH_TOKEN_TTL_SECONDS:-3600}
+      LORE_AUTH_LORE_GRPC_URL: ${LORE_AUTH_LORE_GRPC_URL:-}
+      LORE_AUTH_BOOTSTRAP_USERNAME: ${LORE_AUTH_BOOTSTRAP_USERNAME:-admin}
+      LORE_AUTH_BOOTSTRAP_PASSWORD: ${LORE_AUTH_BOOTSTRAP_PASSWORD:-}
+      RUST_LOG: ${RUST_LOG:-lore_auth=info}
+    volumes:
+      - ./data:/data
+    networks:
+      - auth
+
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    depends_on:
+      lore-auth:
+        condition: service_healthy
+    ports:
+      - "10443:10443"
+    environment:
+      LORE_AUTH_DOMAIN: ${LORE_AUTH_DOMAIN:?set the public DNS name}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./certs:/certs:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - auth
+
+networks:
+  auth:
+
+volumes:
+  caddy_data:
+  caddy_config:

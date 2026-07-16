@@ -1,0 +1,17 @@
+https://:10443 {
+    tls /certs/server.pem /certs/server.key
+
+    @grpc header Content-Type application/grpc*
+
+    handle @grpc {
+        reverse_proxy lore-auth:15051 {
+            transport http {
+                versions h2c
+            }
+        }
+    }
+
+    handle {
+        reverse_proxy lore-auth:18080
+    }
+}

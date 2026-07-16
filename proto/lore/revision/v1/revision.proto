@@ -1,0 +1,27 @@
+syntax = "proto3";
+package lore.revision.v1;
+
+import "lore/model/v1/model.proto";
+
+service RevisionService {
+  rpc BranchList(BranchListRequest) returns (stream BranchListResponse);
+  rpc RevisionList(RevisionListRequest) returns (RevisionListResponse);
+}
+
+message BranchListRequest {
+  optional string creator = 1;
+  bool include_deleted = 2;
+}
+message BranchListResponse { lore.model.v1.Branch branch = 1; }
+
+message RevisionListRequest {
+  oneof start {
+    lore.model.v1.RevisionIdentifier identifier = 1;
+    bytes signature = 2;
+  }
+}
+message RevisionListResponse {
+  repeated lore.model.v1.RevisionItem items = 1;
+  optional bytes signature_forward = 2;
+  optional bytes signature_backward = 3;
+}

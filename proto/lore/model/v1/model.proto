@@ -1,0 +1,36 @@
+syntax = "proto3";
+package lore.model.v1;
+
+message RevisionIdentifier {
+  bytes branch_id = 1;
+  uint64 number = 2;
+}
+
+message RevisionItem {
+  uint64 number = 1;
+  bytes signature = 2;
+  bytes metadata = 3;
+  bytes state = 4;
+}
+
+message Repository {
+  bytes id = 1;
+  string name = 2;
+  string description = 3;
+  bytes default_branch_id = 4;
+  string default_branch_name = 5;
+  string creator = 6;
+  uint64 created = 7;
+  bytes metadata = 8;
+}
+
+message Branch {
+  bytes id = 1;
+  string name = 2;
+  string creator = 3;
+  string category = 4;
+  uint64 created = 5;
+  bytes latest = 6;
+  bool deleted = 7;
+  bytes metadata = 8;
+}

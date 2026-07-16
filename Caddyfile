@@ -1,0 +1,15 @@
+https://{$LORE_AUTH_DOMAIN}:10443 {
+    @grpc header Content-Type application/grpc*
+
+    handle @grpc {
+        reverse_proxy lore-auth:15051 {
+            transport http {
+                versions h2c
+            }
+        }
+    }
+
+    handle {
+        reverse_proxy lore-auth:18080
+    }
+}

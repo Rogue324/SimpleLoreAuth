@@ -1,0 +1,25 @@
+syntax = "proto3";
+package lore.thin_client.v1;
+
+import "lore/model/v1/model.proto";
+
+service ThinClientService {
+  rpc RevisionInfo(RevisionInfoRequest) returns (RevisionInfoResponse);
+}
+
+message RevisionInfoRequest {
+  oneof query {
+    lore.model.v1.RevisionIdentifier identifier = 1;
+    bytes signature = 2;
+  }
+}
+message RevisionInfoResponse { Revision revision = 1; }
+message Revision {
+  bytes signature = 1;
+  lore.model.v1.RevisionIdentifier identifier = 2;
+  string commit_message = 3;
+  uint64 timestamp = 4;
+  string created_by = 5;
+  string committed_by = 6;
+  uint64 number = 10;
+}

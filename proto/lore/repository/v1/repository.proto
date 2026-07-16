@@ -1,0 +1,14 @@
+syntax = "proto3";
+package lore.repository.v1;
+
+import "lore/model/v1/model.proto";
+
+service RepositoryService {
+  rpc RepositoryDelete(RepositoryDeleteRequest) returns (RepositoryDeleteResponse);
+  rpc RepositoryList(RepositoryListRequest) returns (stream RepositoryListResponse);
+}
+
+message RepositoryDeleteRequest { bytes id = 1; }
+message RepositoryDeleteResponse { lore.model.v1.Repository repository = 1; }
+message RepositoryListRequest { optional string creator = 1; }
+message RepositoryListResponse { lore.model.v1.Repository repository = 1; }

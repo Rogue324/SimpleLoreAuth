@@ -1,0 +1,12 @@
+# Advertised to Lore clients and also used by Lore Server for auth RPCs.
+# Use https:// here: official clients register it as a compatible auth scheme,
+# and server-side repository management requires a normal HTTP(S) URI.
+[environment.endpoint]
+auth_url = "https://auth.example.com:10443"
+
+[server.auth]
+jwt_issuer = "https://auth.example.com:10443"
+jwt_audience = ["lore-service"]
+
+[server.auth.jwk]
+endpoint = "https://auth.example.com:10443/.well-known/jwks.json"

@@ -13,6 +13,24 @@ RUN apt-get update \
     && mkdir -p /data \
     && chown lore-auth:lore-auth /data
 COPY --from=builder /build/target/release/lore-auth /usr/local/bin/lore-auth
+
+# Declare the supported runtime settings in the final image so NAS Docker
+# interfaces can pre-populate their environment-variable editor. Required
+# deployment-specific values intentionally remain empty until configured.
+ENV LORE_AUTH_DATA_DIR=/data \
+    LORE_AUTH_HTTP_ADDR=0.0.0.0:18080 \
+    LORE_AUTH_GRPC_ADDR=0.0.0.0:15051 \
+    LORE_AUTH_PUBLIC_BASE_URL="" \
+    LORE_AUTH_ISSUER="" \
+    LORE_AUTH_AUDIENCE=lore-service \
+    LORE_AUTH_ENVIRONMENT=local \
+    LORE_AUTH_TOKEN_TTL_SECONDS=3600 \
+    LORE_AUTH_LOGIN_TTL_SECONDS=300 \
+    LORE_AUTH_LORE_GRPC_URL="" \
+    LORE_AUTH_BOOTSTRAP_USERNAME=admin \
+    LORE_AUTH_BOOTSTRAP_PASSWORD="" \
+    RUST_LOG=lore_auth=info
+
 USER lore-auth
 VOLUME ["/data"]
 EXPOSE 18080 15051

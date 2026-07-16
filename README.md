@@ -79,6 +79,20 @@ LORE_AUTH_IMAGE=ghcr.io/rogue324/simpleloreauth:v1.2.3
 
 ## 快速部署
 
+### 从镜像直接创建容器
+
+官方 GHCR 镜像已在镜像配置中声明全部 Lore Auth 运行参数。NAS 的 Docker 图形界面从镜像创建容器时，会像显示 `PATH` 一样自动列出这些环境变量。具有固定默认值的参数会预填默认值；必须按部署环境填写的参数保持为空。
+
+必须填写的空参数：
+
+- `LORE_AUTH_PUBLIC_BASE_URL`：用户实际访问的 HTTPS 地址。
+- `LORE_AUTH_ISSUER`：JWT 签发者，通常与公网 HTTPS 地址相同。
+- `LORE_AUTH_BOOTSTRAP_PASSWORD`：终极管理员密码；首次启动必须填写。
+
+通常还需要填写 `LORE_AUTH_LORE_GRPC_URL`，后台仓库管理功能通过它连接 Lore Server。默认的 `/data` 路径、`18080` HTTP 端口和 `15051` gRPC 端口会直接显示在镜像参数中。
+
+这里列出的仅是 `lore-auth` 容器参数。域名、HTTPS 映射端口和证书属于 Caddy 容器，应继续使用下面的 `compose.nas.yaml` 参数化部署，或者单独创建 Caddy 容器。
+
 ### NAS 参数化部署（推荐）
 
 `compose.nas.yaml` 面向 NAS Docker 管理界面设计。认证配置、端口、数据目录、TLS 模式和证书位置都可以作为 Docker/Compose 环境变量填写，Caddy 在启动时自动生成配置，不需要创建或挂载 `Caddyfile`。

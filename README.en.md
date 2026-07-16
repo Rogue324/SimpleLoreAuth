@@ -100,6 +100,20 @@ LORE_AUTH_IMAGE=ghcr.io/rogue324/simpleloreauth:v1.2.3
 
 ## Quick Start
 
+### Create a container directly from the image
+
+The GHCR image declares every Lore Auth runtime setting in its image configuration. When a NAS Docker UI creates a container from the image, these environment variables are listed automatically in the same way as `PATH`. Settings with stable defaults are pre-filled, while deployment-specific required settings remain empty.
+
+Required empty settings:
+
+- `LORE_AUTH_PUBLIC_BASE_URL`: the public HTTPS URL used by clients.
+- `LORE_AUTH_ISSUER`: the JWT issuer, normally the same public HTTPS URL.
+- `LORE_AUTH_BOOTSTRAP_PASSWORD`: the root administrator password, required on first startup.
+
+Normally, also set `LORE_AUTH_LORE_GRPC_URL` so the administration UI can manage Lore Server repositories. The `/data` path, HTTP port `18080`, and gRPC port `15051` are included with their defaults.
+
+These are settings for the `lore-auth` container only. The domain, public HTTPS port, and certificates belong to the Caddy container; use the parameterized `compose.nas.yaml` deployment below or create Caddy separately.
+
 ### Parameterized NAS deployment (recommended)
 
 `compose.nas.yaml` is designed for NAS Docker management interfaces. Authentication

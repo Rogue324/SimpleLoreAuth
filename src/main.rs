@@ -126,12 +126,40 @@ async fn main() -> Result<()> {
         .json()
         .init();
 
-    let cli = Cli::parse();
+    let mut cli = Cli::parse();
+    if let Command::Serve(args) = &mut cli.command {
+        // Image-level ENV declarations intentionally expose optional settings
+        // as empty values in NAS container editors. Treat those empty strings
+        // as unset instead of rejecting them as malformed configuration.
+        args.lore_grpc_url = non_empty(args.lore_grpc_url.take());
+        args.bootstrap_username = non_empty(args.bootstrap_username.take());
+        args.bootstrap_password = non_empty(args.bootstrap_password.take());
+    }
     let db = Database::open(cli.data_dir.join("lore-auth.db"))?;
     match cli.command {
         Command::Serve(args) => serve(cli.data_dir, db, args).await,
         Command::User { command } => user_command(db, command),
         Command::Grant { command } => grant_command(db, command),
+    }
+}
+
+fn non_empty(value: Option<String>) -> Option<String> {
+    value.filter(|value| !value.trim().is_empty())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::non_empty;
+
+    #[test]
+    fn empty_image_environment_values_are_treated_as_unset() {
+        assert_eq!(non_empty(None), None);
+        assert_eq!(non_empty(Some(String::new())), None);
+        assert_eq!(non_empty(Some("   ".to_string())), None);
+        assert_eq!(
+            non_empty(Some("http://lore-server:41337".to_string())),
+            Some("http://lore-server:41337".to_string())
+        );
     }
 }
 

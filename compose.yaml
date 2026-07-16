@@ -1,6 +1,6 @@
 services:
   lore-auth:
-    build: .
+    image: ${LORE_AUTH_IMAGE:-ghcr.io/rogue324/simpleloreauth:latest}
     restart: unless-stopped
     environment:
       LORE_AUTH_PUBLIC_BASE_URL: ${LORE_AUTH_PUBLIC_BASE_URL:?set the public HTTPS URL}

@@ -67,6 +67,37 @@ with the authentication endpoint.
 Ports `18080` and `15051` use plaintext protocols inside the Compose network.
 They should only be available on a trusted host or Docker network.
 
+## Prebuilt Docker Images
+
+GitHub Actions automatically builds and publishes `linux/amd64` and
+`linux/arm64` images whenever a commit is pushed to `main`, a `v*` version tag is
+pushed, or the workflow is started manually:
+
+```text
+ghcr.io/rogue324/simpleloreauth:latest
+```
+
+Available tags:
+
+- `latest`: latest successful build from `main`.
+- `sha-xxxxxxx`: a specific Git commit.
+- `v1.2.3`, `1.2.3`, and `1.2`: generated when the `v1.2.3` Git tag is pushed.
+
+The default `compose.yaml` pulls the prebuilt image, so the NAS no longer needs
+to compile Rust. Set `LORE_AUTH_IMAGE` to use another tag:
+
+```env
+LORE_AUTH_IMAGE=ghcr.io/rogue324/simpleloreauth:v1.2.3
+```
+
+> [!NOTE]
+> A GHCR package published under a personal GitHub account is private by default.
+> After the first successful workflow run, open **Packages → simpleloreauth →
+> Package settings → Change visibility** from the GitHub profile and make it
+> **Public** to allow anonymous pulls from the NAS. A public package cannot be
+> made private again. To keep it private, run `docker login ghcr.io` on the NAS
+> before pulling.
+
 ## Quick Start
 
 ### 1. Prepare the environment
@@ -114,7 +145,8 @@ certificate. Your DNS and network must satisfy the Caddy/ACME validation
 requirements.
 
 ```bash
-docker compose up -d --build
+docker compose pull
+docker compose up -d
 ```
 
 #### Option B: Lucky or another reverse proxy with an existing certificate
@@ -130,7 +162,8 @@ Use the manual-certificate configuration:
 
 ```bash
 cp Caddyfile.manual-tls.example Caddyfile
-docker compose up -d --build
+docker compose pull
+docker compose up -d
 ```
 
 If the public address is `https://auth.example.com:2234`, update `.env`:
@@ -316,14 +349,21 @@ repository-ownership records. The RSA private key signs tokens. Back up the whol
 
 ## Updating
 
-After updating the source code, run:
+To update using the prebuilt image:
 
 ```bash
-docker compose up -d --build --force-recreate
+docker compose pull
+docker compose up -d --force-recreate
 ```
 
 Do not delete the `data` directory and do not run `docker compose down -v` unless
 you intend to remove persistent data or Caddy state.
+
+Build locally only for development or source modifications:
+
+```bash
+docker compose -f compose.yaml -f compose.build.yaml up -d --build
+```
 
 ## Troubleshooting
 

@@ -54,6 +54,29 @@ HTTP 登录网页和认证 gRPC 共用同一个公网地址。Lore Server 的仓
 
 `18080` 和 `15051` 在 Compose 网络内使用明文协议，应只存在于可信主机或 Docker 网络中。
 
+## 预编译 Docker 镜像
+
+GitHub Actions 会在每次推送到 `main`、推送 `v*` 版本标签或手动运行工作流时，自动构建并发布 `linux/amd64` 和 `linux/arm64` 镜像：
+
+```text
+ghcr.io/rogue324/simpleloreauth:latest
+```
+
+可用标签：
+
+- `latest`：`main` 分支最新成功构建；
+- `sha-xxxxxxx`：对应具体 Git 提交；
+- `v1.2.3`、`1.2.3`、`1.2`：推送 `v1.2.3` 标签时自动生成。
+
+默认 `compose.yaml` 直接拉取预编译镜像，不再在 NAS 上编译 Rust。可通过 `LORE_AUTH_IMAGE` 指定其他标签：
+
+```env
+LORE_AUTH_IMAGE=ghcr.io/rogue324/simpleloreauth:v1.2.3
+```
+
+> [!NOTE]
+> 个人 GitHub 账户首次发布的 GHCR 包默认为私有。第一次 Action 成功后，在 GitHub 个人主页的 **Packages → simpleloreauth → Package settings → Change visibility** 中将其设为 **Public**，NAS 才能匿名拉取。公开后不能再改回私有；如果希望保持私有，则需要先在 NAS 上执行 `docker login ghcr.io`。
+
 ## 快速部署
 
 ### 1. 准备配置
@@ -99,7 +122,8 @@ LORE_AUTH_BOOTSTRAP_PASSWORD=请替换为至少十位的高强度密码
 默认 `Caddyfile` 使用 `LORE_AUTH_DOMAIN` 自动管理证书。域名和网络必须满足 Caddy/ACME 的验证要求。
 
 ```bash
-docker compose up -d --build
+docker compose pull
+docker compose up -d
 ```
 
 #### 方式 B：Lucky/其他反向代理 + 已有证书
@@ -115,7 +139,8 @@ certs/server.key
 
 ```bash
 cp Caddyfile.manual-tls.example Caddyfile
-docker compose up -d --build
+docker compose pull
+docker compose up -d
 ```
 
 如果公网使用 `https://auth.example.com:2234`，`.env` 必须相应写成：
@@ -288,13 +313,20 @@ docker compose exec lore-auth lore-auth grant revoke alice \
 
 ## 更新
 
-更新源码后：
+使用预编译镜像更新：
 
 ```bash
-docker compose up -d --build --force-recreate
+docker compose pull
+docker compose up -d --force-recreate
 ```
 
 不要删除 `data` 目录，也不要使用 `docker compose down -v`，否则可能清除持久数据或 Caddy 状态。
+
+仅在开发或修改源码时本地构建：
+
+```bash
+docker compose -f compose.yaml -f compose.build.yaml up -d --build
+```
 
 ## 常见问题
 

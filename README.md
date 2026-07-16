@@ -121,6 +121,35 @@ LORE_AUTH_BOOTSTRAP_PASSWORD=请替换为至少十位的高强度密码
 
 默认 `Caddyfile` 使用 `LORE_AUTH_DOMAIN` 自动管理证书。域名和网络必须满足 Caddy/ACME 的验证要求。
 
+项目根目录的 `Caddyfile` 应为：
+
+```caddyfile
+https://{$LORE_AUTH_DOMAIN}:10443 {
+    @grpc header Content-Type application/grpc*
+
+    handle @grpc {
+        reverse_proxy lore-auth:15051 {
+            transport http {
+                versions h2c
+            }
+        }
+    }
+
+    handle {
+        reverse_proxy lore-auth:18080
+    }
+}
+```
+
+其中：
+
+- `LORE_AUTH_DOMAIN` 从 `.env` 传入，只填写域名，例如 `auth.example.com`；
+- 带有 `Content-Type: application/grpc` 的请求转发到认证 gRPC 端口 `15051`；
+- `versions h2c` 表示 Caddy 到认证容器之间使用明文 HTTP/2，这是 gRPC 必需配置；
+- 登录页、管理后台、健康检查和 JWKS 等普通 HTTP 请求转发到 `18080`；
+- `lore-auth` 是 Compose 内的服务名，不要改成公网域名；
+- 若由 Caddy 直接申请公网证书，公网 TCP `443` 必须能够转发到 NAS 的 `10443`，并满足 ACME 验证条件。
+
 ```bash
 docker compose pull
 docker compose up -d
@@ -143,6 +172,38 @@ docker compose pull
 docker compose up -d
 ```
 
+此时 `Caddyfile` 的完整内容应为：
+
+```caddyfile
+https://:10443 {
+    tls /certs/server.pem /certs/server.key
+
+    @grpc header Content-Type application/grpc*
+
+    handle @grpc {
+        reverse_proxy lore-auth:15051 {
+            transport http {
+                versions h2c
+            }
+        }
+    }
+
+    handle {
+        reverse_proxy lore-auth:18080
+    }
+}
+```
+
+`compose.yaml` 已经完成以下挂载，不需要把 NAS 的绝对路径写入 `Caddyfile`：
+
+```yaml
+volumes:
+  - ./Caddyfile:/etc/caddy/Caddyfile:ro
+  - ./certs:/certs:ro
+```
+
+因此宿主机的 `certs/server.pem` 和 `certs/server.key` 在 Caddy 容器内分别是 `/certs/server.pem` 和 `/certs/server.key`。证书必须覆盖客户端访问使用的域名，证书文件需要包含完整证书链，私钥必须与证书匹配。
+
 如果公网使用 `https://auth.example.com:2234`，`.env` 必须相应写成：
 
 ```env
@@ -160,6 +221,22 @@ grpc 使用安全连接：是
 ```
 
 必须保留 HTTP/2。若普通网页正常但 gRPC 返回 `grpc-status: 14`，通常是 Lucky 没有启用“grpc 使用安全连接”。
+
+修改 `Caddyfile` 后可以先检查配置，再重启 Caddy：
+
+```bash
+docker compose exec caddy caddy validate --config /etc/caddy/Caddyfile
+docker compose restart caddy
+docker compose logs --tail=100 caddy
+```
+
+常见配置错误：
+
+- `Caddyfile` 在 NAS 上被误建成同名目录，挂载时会报告 `not a directory`；
+- 手动证书模式仍保留 `https://{$LORE_AUTH_DOMAIN}:10443`，导致配置和实际证书入口混用；
+- gRPC 上游没有配置 `versions h2c`，网页可访问但 Lore 登录或权限检查失败；
+- Lucky 后端写成 `http://NAS:10443`，而 Caddy 的 `10443` 实际是 HTTPS；
+- 只转发 `18080`，遗漏 `15051` 的 gRPC 分流。
 
 ### 3. 验证认证服务
 

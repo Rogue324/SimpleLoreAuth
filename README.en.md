@@ -144,6 +144,41 @@ The default `Caddyfile` uses `LORE_AUTH_DOMAIN` and lets Caddy manage the
 certificate. Your DNS and network must satisfy the Caddy/ACME validation
 requirements.
 
+The `Caddyfile` in the project root must contain:
+
+```caddyfile
+https://{$LORE_AUTH_DOMAIN}:10443 {
+    @grpc header Content-Type application/grpc*
+
+    handle @grpc {
+        reverse_proxy lore-auth:15051 {
+            transport http {
+                versions h2c
+            }
+        }
+    }
+
+    handle {
+        reverse_proxy lore-auth:18080
+    }
+}
+```
+
+In this configuration:
+
+- `LORE_AUTH_DOMAIN` comes from `.env` and contains only a hostname, such as
+  `auth.example.com`.
+- Requests with `Content-Type: application/grpc` are routed to authentication
+  gRPC port `15051`.
+- `versions h2c` enables plaintext HTTP/2 between Caddy and the authentication
+  container, which is required for gRPC.
+- Login pages, the admin console, health checks, JWKS, and other normal HTTP
+  requests are routed to port `18080`.
+- `lore-auth` is the Compose service name; do not replace it with the public
+  hostname.
+- When Caddy obtains the public certificate directly, public TCP port `443` must
+  reach port `10443` on the NAS and the ACME validation requirements must be met.
+
 ```bash
 docker compose pull
 docker compose up -d
@@ -166,6 +201,42 @@ docker compose pull
 docker compose up -d
 ```
 
+The complete `Caddyfile` must then contain:
+
+```caddyfile
+https://:10443 {
+    tls /certs/server.pem /certs/server.key
+
+    @grpc header Content-Type application/grpc*
+
+    handle @grpc {
+        reverse_proxy lore-auth:15051 {
+            transport http {
+                versions h2c
+            }
+        }
+    }
+
+    handle {
+        reverse_proxy lore-auth:18080
+    }
+}
+```
+
+`compose.yaml` already mounts the required files, so do not put absolute NAS
+paths in `Caddyfile`:
+
+```yaml
+volumes:
+  - ./Caddyfile:/etc/caddy/Caddyfile:ro
+  - ./certs:/certs:ro
+```
+
+The host files `certs/server.pem` and `certs/server.key` therefore appear inside
+the Caddy container as `/certs/server.pem` and `/certs/server.key`. The
+certificate must cover the hostname used by clients, include the complete
+certificate chain, and match the private key.
+
 If the public address is `https://auth.example.com:2234`, update `.env`:
 
 ```env
@@ -185,6 +256,25 @@ Disable persistent connections: No
 HTTP/2 must be preserved. If normal web pages work but gRPC returns
 `grpc-status: 14`, Lucky usually does not have **Use secure connection for gRPC**
 enabled.
+
+After editing `Caddyfile`, validate it and restart Caddy:
+
+```bash
+docker compose exec caddy caddy validate --config /etc/caddy/Caddyfile
+docker compose restart caddy
+docker compose logs --tail=100 caddy
+```
+
+Common configuration mistakes:
+
+- `Caddyfile` was accidentally created as a directory on the NAS, producing a
+  `not a directory` mount error.
+- The manual-certificate setup still uses
+  `https://{$LORE_AUTH_DOMAIN}:10443`, mixing the two TLS modes.
+- The gRPC upstream is missing `versions h2c`; web pages work but Lore login or
+  authorization checks fail.
+- Lucky uses `http://NAS:10443` even though Caddy serves HTTPS on port `10443`.
+- Only port `18080` is routed and the gRPC route to `15051` is missing.
 
 ### 3. Verify the service
 

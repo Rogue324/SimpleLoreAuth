@@ -4,94 +4,28 @@ services:
   lore-auth:
     image: ${LORE_AUTH_IMAGE:-ghcr.io/rogue324/simpleloreauth:latest}
     restart: unless-stopped
+    ports:
+      - "${LORE_AUTH_HTTPS_PORT:-10443}:10443"
     environment:
       LORE_AUTH_PUBLIC_BASE_URL: ${LORE_AUTH_PUBLIC_BASE_URL:?set the public HTTPS URL}
       LORE_AUTH_ISSUER: ${LORE_AUTH_ISSUER:?set the JWT issuer}
       LORE_AUTH_AUDIENCE: ${LORE_AUTH_AUDIENCE:-lore-service}
       LORE_AUTH_ENVIRONMENT: ${LORE_AUTH_ENVIRONMENT:-local}
       LORE_AUTH_TOKEN_TTL_SECONDS: ${LORE_AUTH_TOKEN_TTL_SECONDS:-3600}
+      LORE_AUTH_LOGIN_TTL_SECONDS: ${LORE_AUTH_LOGIN_TTL_SECONDS:-300}
       LORE_AUTH_LORE_GRPC_URL: ${LORE_AUTH_LORE_GRPC_URL:-}
       LORE_AUTH_BOOTSTRAP_USERNAME: ${LORE_AUTH_BOOTSTRAP_USERNAME:-admin}
       LORE_AUTH_BOOTSTRAP_PASSWORD: ${LORE_AUTH_BOOTSTRAP_PASSWORD:-}
-      RUST_LOG: ${RUST_LOG:-lore_auth=info}
-    volumes:
-      - ${LORE_AUTH_DATA_DIR:-./data}:/data
-    networks:
-      - auth
-
-  caddy:
-    image: caddy:2.10-alpine
-    restart: unless-stopped
-    depends_on:
-      lore-auth:
-        condition: service_healthy
-    ports:
-      - "${LORE_AUTH_HTTPS_PORT:-10443}:10443"
-    environment:
       CADDY_TLS_MODE: ${CADDY_TLS_MODE:-manual}
       LORE_AUTH_DOMAIN: ${LORE_AUTH_DOMAIN:-}
       CADDY_CERT_FILE: ${CADDY_CERT_FILE:-/certs/server.pem}
       CADDY_KEY_FILE: ${CADDY_KEY_FILE:-/certs/server.key}
-    entrypoint:
-      - /bin/sh
-      - -eu
-      - -c
-    command:
-      - |
-        case "$${CADDY_TLS_MODE}" in
-          auto)
-            if [ -z "$${LORE_AUTH_DOMAIN}" ]; then
-              echo "LORE_AUTH_DOMAIN is required when CADDY_TLS_MODE=auto" >&2
-              exit 1
-            fi
-            site="https://$${LORE_AUTH_DOMAIN}:10443"
-            tls_directive=""
-            ;;
-          manual)
-            if [ ! -r "$${CADDY_CERT_FILE}" ] || [ ! -r "$${CADDY_KEY_FILE}" ]; then
-              echo "Caddy certificate or key is not readable" >&2
-              exit 1
-            fi
-            site="https://:10443"
-            tls_directive="tls $${CADDY_CERT_FILE} $${CADDY_KEY_FILE}"
-            ;;
-          *)
-            echo "CADDY_TLS_MODE must be auto or manual" >&2
-            exit 1
-            ;;
-        esac
-
-        cat > /tmp/Caddyfile <<EOF
-        $${site} {
-            $${tls_directive}
-
-            @grpc header Content-Type application/grpc*
-
-            handle @grpc {
-                reverse_proxy lore-auth:15051 {
-                    transport http {
-                        versions h2c
-                    }
-                }
-            }
-
-            handle {
-                reverse_proxy lore-auth:18080
-            }
-        }
-        EOF
-
-        caddy validate --config /tmp/Caddyfile --adapter caddyfile
-        exec caddy run --config /tmp/Caddyfile --adapter caddyfile
+      RUST_LOG: ${RUST_LOG:-lore_auth=info}
     volumes:
+      - ${LORE_AUTH_DATA_DIR:-./data}:/data
       - ${CADDY_CERTS_DIR:-./certs}:/certs:ro
-      - caddy_data:/data
-      - caddy_config:/config
-    networks:
-      - auth
-
-networks:
-  auth:
+      - caddy_data:/caddy-data
+      - caddy_config:/caddy-config
 
 volumes:
   caddy_data:

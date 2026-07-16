@@ -70,8 +70,8 @@ while kill -0 "$auth_pid" 2>/dev/null && kill -0 "$caddy_pid" 2>/dev/null; do
 done
 
 if ! kill -0 "$auth_pid" 2>/dev/null; then
-  echo "Lore Auth exited; stopping the bundled container" >&2
+  echo "Lore Auth exited; stopping the container" >&2
 else
-  echo "Caddy exited; stopping the bundled container" >&2
+  echo "Caddy exited; stopping the container" >&2
 fi
 exit 1

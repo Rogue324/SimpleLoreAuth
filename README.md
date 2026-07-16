@@ -1,5 +1,7 @@
 # SimpleLoreAuth
 
+[简体中文](README.md) | [English](README.en.md)
+
 一个面向家庭 NAS、小型团队和私有网络部署的
 [EpicGames/lore](https://github.com/EpicGames/lore) 独立认证与权限服务。
 

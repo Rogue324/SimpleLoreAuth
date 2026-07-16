@@ -100,6 +100,76 @@ LORE_AUTH_IMAGE=ghcr.io/rogue324/simpleloreauth:v1.2.3
 
 ## Quick Start
 
+### Parameterized NAS deployment (recommended)
+
+`compose.nas.yaml` is designed for NAS Docker management interfaces. Authentication
+settings, ports, data directories, TLS mode, and certificate locations are all
+provided as Docker/Compose environment variables. Caddy generates its configuration
+when the container starts, so no `Caddyfile` needs to be created or mounted.
+
+Set the following values in the NAS Compose project environment-variable page:
+
+```env
+LORE_AUTH_IMAGE=ghcr.io/rogue324/simpleloreauth:latest
+LORE_AUTH_DATA_DIR=/path/on/nas/lore-auth/data
+LORE_AUTH_HTTPS_PORT=10443
+
+LORE_AUTH_DOMAIN=auth.example.com
+LORE_AUTH_PUBLIC_BASE_URL=https://auth.example.com:2234
+LORE_AUTH_ISSUER=https://auth.example.com:2234
+LORE_AUTH_AUDIENCE=lore-service
+LORE_AUTH_ENVIRONMENT=home
+LORE_AUTH_TOKEN_TTL_SECONDS=3600
+LORE_AUTH_LORE_GRPC_URL=http://NAS-LAN-IP:41337
+LORE_AUTH_BOOTSTRAP_USERNAME=admin
+LORE_AUTH_BOOTSTRAP_PASSWORD=replace-with-a-long-random-password
+RUST_LOG=lore_auth=info
+
+CADDY_TLS_MODE=manual
+CADDY_CERTS_DIR=/path/on/nas/lore-auth/certs
+CADDY_CERT_FILE=/certs/server.pem
+CADDY_KEY_FILE=/certs/server.key
+```
+
+| Parameter | Example | Description |
+|---|---|---|
+| `LORE_AUTH_IMAGE` | `ghcr.io/rogue324/simpleloreauth:latest` | Authentication service image and tag |
+| `LORE_AUTH_DATA_DIR` | `/volume/lore-auth/data` | NAS directory containing the database and RSA keys |
+| `LORE_AUTH_HTTPS_PORT` | `10443` | NAS TCP port mapped to Caddy port `10443` |
+| `CADDY_TLS_MODE` | `manual` | `manual` uses an existing certificate; `auto` lets Caddy obtain one |
+| `CADDY_CERTS_DIR` | `/volume/lore-auth/certs` | NAS certificate directory, required only in manual mode |
+| `CADDY_CERT_FILE` | `/certs/server.pem` | Certificate path inside the Caddy container, not a NAS path |
+| `CADDY_KEY_FILE` | `/certs/server.key` | Private-key path inside the Caddy container, not a NAS path |
+
+Start the stack with:
+
+```bash
+docker compose -f compose.nas.yaml pull
+docker compose -f compose.nas.yaml up -d
+```
+
+If the NAS interface can import a Compose file, import `compose.nas.yaml` and set
+the environment variables in the UI. No `Caddyfile` upload is required.
+
+In manual mode, place the certificate files in the NAS directory selected by
+`CADDY_CERTS_DIR`. The default names are `server.pem` and `server.key`. To keep
+different names, change only the paths inside the container:
+
+```env
+CADDY_CERT_FILE=/certs/example.pem
+CADDY_KEY_FILE=/certs/example.key
+```
+
+For automatic certificates, set:
+
+```env
+CADDY_TLS_MODE=auto
+LORE_AUTH_DOMAIN=auth.example.com
+```
+
+Automatic mode ignores `CADDY_CERT_FILE` and `CADDY_KEY_FILE`, but public port
+`443` must still reach the NAS `LORE_AUTH_HTTPS_PORT` and satisfy ACME validation.
+
 ### 1. Prepare the environment
 
 ```bash

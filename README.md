@@ -79,6 +79,71 @@ LORE_AUTH_IMAGE=ghcr.io/rogue324/simpleloreauth:v1.2.3
 
 ## 快速部署
 
+### NAS 参数化部署（推荐）
+
+`compose.nas.yaml` 面向 NAS Docker 管理界面设计。认证配置、端口、数据目录、TLS 模式和证书位置都可以作为 Docker/Compose 环境变量填写，Caddy 在启动时自动生成配置，不需要创建或挂载 `Caddyfile`。
+
+在 NAS 的 Compose 项目环境变量页面填写：
+
+```env
+LORE_AUTH_IMAGE=ghcr.io/rogue324/simpleloreauth:latest
+LORE_AUTH_DATA_DIR=/path/on/nas/lore-auth/data
+LORE_AUTH_HTTPS_PORT=10443
+
+LORE_AUTH_DOMAIN=auth.example.com
+LORE_AUTH_PUBLIC_BASE_URL=https://auth.example.com:2234
+LORE_AUTH_ISSUER=https://auth.example.com:2234
+LORE_AUTH_AUDIENCE=lore-service
+LORE_AUTH_ENVIRONMENT=home
+LORE_AUTH_TOKEN_TTL_SECONDS=3600
+LORE_AUTH_LORE_GRPC_URL=http://NAS-LAN-IP:41337
+LORE_AUTH_BOOTSTRAP_USERNAME=admin
+LORE_AUTH_BOOTSTRAP_PASSWORD=replace-with-a-long-random-password
+RUST_LOG=lore_auth=info
+
+CADDY_TLS_MODE=manual
+CADDY_CERTS_DIR=/path/on/nas/lore-auth/certs
+CADDY_CERT_FILE=/certs/server.pem
+CADDY_KEY_FILE=/certs/server.key
+```
+
+参数说明：
+
+| 参数 | 示例 | 说明 |
+|---|---|---|
+| `LORE_AUTH_IMAGE` | `ghcr.io/rogue324/simpleloreauth:latest` | 认证服务镜像及标签 |
+| `LORE_AUTH_DATA_DIR` | `/volume/lore-auth/data` | NAS 上保存数据库和 RSA 密钥的目录 |
+| `LORE_AUTH_HTTPS_PORT` | `10443` | NAS 对外映射到 Caddy `10443` 的 TCP 端口 |
+| `CADDY_TLS_MODE` | `manual` | `manual` 使用已有证书；`auto` 由 Caddy 申请证书 |
+| `CADDY_CERTS_DIR` | `/volume/lore-auth/certs` | NAS 上的证书目录，仅手动证书模式需要 |
+| `CADDY_CERT_FILE` | `/certs/server.pem` | Caddy 容器内证书路径，不是 NAS 路径 |
+| `CADDY_KEY_FILE` | `/certs/server.key` | Caddy 容器内私钥路径，不是 NAS 路径 |
+
+启动：
+
+```bash
+docker compose -f compose.nas.yaml pull
+docker compose -f compose.nas.yaml up -d
+```
+
+如果 NAS 图形界面支持导入 Compose，导入 `compose.nas.yaml` 后在界面中填写上述环境变量即可，不需要上传 `Caddyfile`。
+
+手动证书模式需要把证书文件放在 `CADDY_CERTS_DIR` 指向的 NAS 目录中。默认文件名是 `server.pem` 和 `server.key`；若保留其他文件名，只需修改容器内路径，例如：
+
+```env
+CADDY_CERT_FILE=/certs/yxbro.pem
+CADDY_KEY_FILE=/certs/yxbro.key
+```
+
+自动证书模式设置：
+
+```env
+CADDY_TLS_MODE=auto
+LORE_AUTH_DOMAIN=auth.example.com
+```
+
+自动模式不使用 `CADDY_CERT_FILE` 和 `CADDY_KEY_FILE`，但公网 `443` 仍必须能够转发到 NAS 的 `LORE_AUTH_HTTPS_PORT` 并满足 ACME 验证条件。
+
 ### 1. 准备配置
 
 ```bash

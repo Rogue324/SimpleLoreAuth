@@ -10,6 +10,8 @@ on:
       - .github/workflows/docker-publish.yml
       - .dockerignore
       - Dockerfile
+      - Dockerfile.bundled
+      - docker/**
       - Cargo.toml
       - Cargo.lock
       - build.rs
@@ -52,6 +54,41 @@ jobs:
         org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
       set-meta-labels: true
       cache: true
+      cache-mode: max
+      sbom: true
+      sign: auto
+    secrets:
+      registry-auths: |
+        - registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+  build-and-push-bundled:
+    name: Build and push bundled Auth + Caddy image
+    uses: docker/github-builder/.github/workflows/build.yml@v1
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    with:
+      file: Dockerfile.bundled
+      output: image
+      push: true
+      platforms: linux/amd64,linux/arm64
+      meta-images: ghcr.io/rogue324/simpleloreauth
+      meta-tags: |
+        type=raw,value=bundled,enable=${{ github.ref == 'refs/heads/main' }}
+        type=sha,prefix=bundled-sha-
+        type=semver,pattern={{version}},prefix=bundled-
+        type=semver,pattern={{major}}.{{minor}},prefix=bundled-
+      labels: |
+        org.opencontainers.image.title=SimpleLoreAuth Bundled
+        org.opencontainers.image.description=SimpleLoreAuth with an integrated Caddy HTTPS and gRPC proxy
+        org.opencontainers.image.licenses=MIT
+        org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+      set-meta-labels: true
+      cache: true
+      cache-scope: bundled
       cache-mode: max
       sbom: true
       sign: auto

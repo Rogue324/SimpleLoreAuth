@@ -75,12 +75,15 @@ pushed, or the workflow is started manually:
 
 ```text
 ghcr.io/rogue324/simpleloreauth:latest
+ghcr.io/rogue324/simpleloreauth:bundled
 ```
 
 Available tags:
 
 - `latest`: latest successful build from `main`.
+- `bundled`: latest all-in-one Auth + Caddy build from `main`.
 - `sha-xxxxxxx`: a specific Git commit.
+- `bundled-sha-xxxxxxx`: the bundled image for a specific Git commit.
 - `v1.2.3`, `1.2.3`, and `1.2`: generated when the `v1.2.3` Git tag is pushed.
 
 The default `compose.yaml` pulls the prebuilt image, so the NAS no longer needs
@@ -100,9 +103,45 @@ LORE_AUTH_IMAGE=ghcr.io/rogue324/simpleloreauth:v1.2.3
 
 ## Quick Start
 
+### Bundled Auth + Caddy image (recommended for NAS)
+
+To create only one Docker container, use:
+
+```text
+ghcr.io/rogue324/simpleloreauth:bundled
+```
+
+This image runs Lore Auth and Caddy together. They communicate only through `127.0.0.1:18080` and `127.0.0.1:15051` inside the container; only container TCP port `10443` needs to be published. Built-in process supervision stops the whole container if either service exits, allowing the Docker restart policy to recover it.
+
+At minimum, configure these values in the NAS UI:
+
+```env
+LORE_AUTH_PUBLIC_BASE_URL=https://lore.example.com:10443
+LORE_AUTH_ISSUER=https://lore.example.com:10443
+LORE_AUTH_BOOTSTRAP_PASSWORD=replace-with-a-long-random-password
+LORE_AUTH_LORE_GRPC_URL=http://NAS-LAN-IP:41337
+
+CADDY_TLS_MODE=manual
+CADDY_CERT_FILE=/certs/server.pem
+CADDY_KEY_FILE=/certs/server.key
+```
+
+Add these mappings:
+
+- NAS data directory → `/data`, read-write.
+- NAS certificate directory → `/certs`, read-only.
+- NAS HTTPS port (for example `10443`) → container TCP `10443`.
+
+For different certificate names, change `CADDY_CERT_FILE` and `CADDY_KEY_FILE`. Persist `/caddy-data` and `/caddy-config` when Caddy manages certificates automatically. Alternatively, deploy `compose.bundled.yaml` directly:
+
+```bash
+docker compose -f compose.bundled.yaml pull
+docker compose -f compose.bundled.yaml up -d
+```
+
 ### Create a container directly from the image
 
-The GHCR image declares every Lore Auth runtime setting in its image configuration. When a NAS Docker UI creates a container from the image, these environment variables are listed automatically in the same way as `PATH`. Settings with stable defaults are pre-filled, while deployment-specific required settings remain empty.
+Both the pure-Auth `latest` image and the all-in-one `bundled` image declare their runtime settings in the image configuration. When a NAS Docker UI creates a container from an image, these environment variables are listed automatically in the same way as `PATH`. Settings with stable defaults are pre-filled, while deployment-specific required settings remain empty.
 
 Required empty settings:
 

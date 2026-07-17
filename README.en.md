@@ -2,76 +2,57 @@
 
 [简体中文](README.md) | [English](README.en.md)
 
-An independent authentication and authorization service for
-[EpicGames/lore](https://github.com/EpicGames/lore), designed for home NAS devices,
-small teams, and private-network deployments.
-
-SimpleLoreAuth implements the authentication gRPC APIs used by Lore clients and
-Lore Server. It also provides username/password login, a Chinese web-based admin
-console, user administration, repository permissions, and repository management.
-It integrates through Lore's standard protocols and does not require changes to
-the Lore source code.
+SimpleLoreAuth is an independent authentication and authorization service for self-hosted [EpicGames/lore](https://github.com/EpicGames/lore) servers. It implements Lore's standard authentication gRPC APIs and provides browser login, user administration, repository authorization, and repository management without modifying Lore.
 
 > [!IMPORTANT]
-> This is a community project. It is not an official Epic Games authentication
-> service and is not affiliated with Epic Games. Validate it in a trusted test
-> environment before using it with important data.
+> This is a community project. It is not an official Epic Games authentication service and is not affiliated with Epic Games. Validate compatibility and backup recovery in a controlled environment before using it with important data.
 
 ## Features
 
-- Implements the Lore `UrcAuthApi` gRPC protocol for login, token exchange, and
-  permission queries.
+- Implements Lore `UrcAuthApi` login, token exchange, and permission queries.
 - Implements the `RebacApi` used when Lore creates, lists, and deletes repositories.
-- Browser-based username/password login compatible with interactive login in
-  Lore Desktop and Lore CLI.
-- SQLite user database with Argon2id password hashing.
-- RS256 JWT signing and a standard `/.well-known/jwks.json` endpoint.
-- Create, enable, disable, update, and delete regular user accounts.
-- Grant per-repository read, write, repository-management, or full permissions.
-- Chinese web administration console.
-- Read the repository list from Lore Server in real time.
-- View the latest 50 commits for a repository.
-- Permanently delete a repository after confirming its name.
-- Docker Compose deployment with Caddy HTTPS and gRPC/h2c routing.
-- Command-line tools for user and permission administration.
+- Supports browser-based interactive login from Lore Desktop and Lore CLI.
+- Stores Argon2id password hashes, users, and grants in SQLite.
+- Signs RS256 JWTs and exposes a standard `/.well-known/jwks.json` endpoint.
+- Creates, enables, disables, deletes, and resets regular user accounts.
+- Assigns read, write, repository-management, or full permissions per repository.
+- Provides a Chinese web administration console.
+- Reads Lore Server repositories and their latest 50 commits.
+- Permanently deletes Lore repositories after confirmation.
+- Ships an all-in-one Docker image containing SimpleLoreAuth and Caddy.
+- Includes command-line user and grant administration tools.
 
-External OIDC providers, third-party login, and API-key login are not currently
-implemented. Calls to those APIs return `UNIMPLEMENTED`.
+External OIDC providers, third-party login, and API-key login are not implemented. Calls to those APIs return `UNIMPLEMENTED`.
 
 ## Architecture
 
 ```mermaid
 flowchart LR
     C["Lore Desktop / CLI"] -->|"Lore gRPC :41337"| L["Lore Server"]
-    C -->|"HTTPS + authentication gRPC"| P["Caddy / Lucky"]
+    C -->|"HTTPS + authentication gRPC"| P["Caddy"]
+    L -->|"Authentication and authorization"| P
     P -->|"HTTP :18080"| A["SimpleLoreAuth"]
     P -->|"h2c gRPC :15051"| A
-    L -->|"Permission-check gRPC"| P
-    A -->|"Repository-management gRPC :41337"| L
-    A --> D[("SQLite + RSA keys")]
+    A -->|"Repository management gRPC :41337"| L
+    A --> D[("SQLite + RSA private key")]
 ```
 
-The HTTP login pages and authentication gRPC service share one public address.
-The Lore Server repository endpoint is a separate service and must not be confused
-with the authentication endpoint.
+The login pages, administration console, JWKS endpoint, and authentication gRPC service share one HTTPS address. The Lore Server repository endpoint is a separate service and must not be used as the authentication endpoint.
 
 ## Ports
 
-| Port | Protocol | Purpose | Public exposure |
+| Port | Protocol | Purpose | Exposure |
 |---|---|---|---|
-| `18080` | HTTP/1.1 | Login UI, admin console, health check, and JWKS | No |
-| `15051` | h2c gRPC | Lore authentication and authorization APIs | No |
-| `10443` | HTTPS + HTTP/2 | Unified public Caddy endpoint | Yes, or expose only to an upstream reverse proxy |
-| `41337` | h2c gRPC | Lore Server repository service; not part of SimpleLoreAuth | Depends on your network design |
+| `10443` | HTTPS + HTTP/2 | All-in-one container entry point | Publish on the host or behind an upstream proxy |
+| `18080` | HTTP/1.1 | Login, administration, health, and JWKS | Container loopback only |
+| `15051` | h2c gRPC | Lore authentication and authorization APIs | Container loopback only |
+| `41337` | h2c gRPC | Lore Server repository service | Provided separately by Lore Server |
 
-Ports `18080` and `15051` bind only to `127.0.0.1` inside the all-in-one
-container and are not exposed by the image. Publish only port `10443`.
+The image exposes only port `10443`. Ports `18080` and `15051` are used exclusively between Caddy and SimpleLoreAuth inside the container.
 
-## Prebuilt Docker Images
+## Docker Image
 
-GitHub Actions automatically builds and publishes `linux/amd64` and
-`linux/arm64` images whenever a commit is pushed to `main`, a `v*` version tag is
-pushed, or the workflow is started manually:
+GitHub Actions builds the all-in-one image for `linux/amd64` and `linux/arm64`:
 
 ```text
 ghcr.io/rogue324/simpleloreauth:latest
@@ -79,126 +60,19 @@ ghcr.io/rogue324/simpleloreauth:latest
 
 Available tags:
 
-- `latest`: latest successful all-in-one Auth + Caddy build from `main`.
+- `latest`: latest successful build from `main`.
 - `sha-xxxxxxx`: a specific Git commit.
-- `v1.2.3`, `1.2.3`, and `1.2`: generated when the `v1.2.3` Git tag is pushed.
+- `v1.2.3`, `1.2.3`, and `1.2`: generated from a `v1.2.3` release tag.
 
-The default `compose.yaml` pulls the prebuilt image, so the NAS no longer needs
-to compile Rust. Set `LORE_AUTH_IMAGE` to use another tag:
+Set `LORE_AUTH_IMAGE` to select another image tag:
 
 ```env
 LORE_AUTH_IMAGE=ghcr.io/rogue324/simpleloreauth:v1.2.3
 ```
 
-> [!NOTE]
-> A GHCR package published under a personal GitHub account is private by default.
-> After the first successful workflow run, open **Packages → simpleloreauth →
-> Package settings → Change visibility** from the GitHub profile and make it
-> **Public** to allow anonymous pulls from the NAS. A public package cannot be
-> made private again. To keep it private, run `docker login ghcr.io` on the NAS
-> before pulling.
-
 ## Quick Start
 
-### All-in-one Auth + Caddy image
-
-`latest` is the only published runtime image and contains both Lore Auth and Caddy:
-
-```text
-ghcr.io/rogue324/simpleloreauth:latest
-```
-
-This image runs Lore Auth and Caddy together. They communicate only through `127.0.0.1:18080` and `127.0.0.1:15051` inside the container; only container TCP port `10443` needs to be published. Built-in process supervision stops the whole container if either service exits, allowing the Docker restart policy to recover it.
-
-At minimum, configure these values in the NAS UI:
-
-```env
-LORE_AUTH_URL=https://lore.example.com:10443
-LORE_AUTH_PASSWORD=replace-with-a-long-random-password
-LORE_SERVER_URL=http://NAS-LAN-IP:41337
-LORE_AUTH_TLS_MODE=manual
-```
-
-Add these mappings:
-
-- NAS data directory → `/data`, read-write.
-- NAS certificate directory → `/certs`, read-only.
-- NAS HTTPS port (for example `10443`) → container TCP `10443`.
-
-Manual TLS always reads `/certs/server.pem` and `/certs/server.key`; place the files under those names in the mounted NAS certificate directory. Persist `/caddy-data` and `/caddy-config` when Caddy manages certificates automatically. The default `compose.yaml` is already an all-in-one single-container deployment:
-
-```bash
-docker compose pull
-docker compose up -d
-```
-
-### Create a container directly from the image
-
-The all-in-one `latest` image declares its runtime settings in the image configuration. When a NAS Docker UI creates a container from the image, these environment variables are listed automatically in the same way as `PATH`. Settings with stable defaults are pre-filled, while deployment-specific required settings remain empty.
-
-The image exposes only four runtime settings:
-
-- `LORE_AUTH_URL`: the complete public HTTPS URL; it is also the JWT issuer and the source of the TLS hostname.
-- `LORE_AUTH_PASSWORD`: root administrator password, required on first startup.
-- `LORE_SERVER_URL`: internal Lore Server gRPC URL, needed for repository administration.
-- `LORE_AUTH_TLS_MODE`: `manual` (default) or `auto`.
-
-The administrator username defaults to `admin`. JWT Audience is derived automatically from the host name in `LORE_AUTH_URL`, without the scheme, port, or path. For example, `https://auth.example.com:10443` produces `auth.example.com`. It must exactly match Lore Server's `jwt_audience`. If the legacy advanced variable `LORE_AUTH_AUDIENCE` is set to another value, the container refuses to start and reports the expected value. Other advanced settings use built-in defaults instead of filling the NAS environment list. Ports `18080` and `15051` are internal only.
-
-The domain, HTTPS, and certificate settings belong to the same `latest` container; no separate Caddy container is required.
-
-### Parameterized NAS deployment (recommended)
-
-Use the single `compose.yaml`; the duplicate `compose.nas.yaml` has been removed.
-Caddy generates its configuration when the container starts, so no `Caddyfile`
-needs to be created or mounted.
-
-Set the following values in the NAS Compose project environment-variable page:
-
-```env
-LORE_AUTH_DATA_DIR=/path/on/nas/lore-auth/data
-LORE_AUTH_HTTPS_PORT=10443
-CADDY_CERTS_DIR=/path/on/nas/lore-auth/certs
-
-LORE_AUTH_URL=https://auth.example.com:2234
-LORE_AUTH_PASSWORD=replace-with-a-long-random-password
-LORE_SERVER_URL=http://NAS-LAN-IP:41337
-LORE_AUTH_TLS_MODE=manual
-```
-
-| Parameter | Example | Description |
-|---|---|---|
-| `LORE_AUTH_DATA_DIR` | `/volume/lore-auth/data` | NAS directory containing the database and RSA keys |
-| `LORE_AUTH_HTTPS_PORT` | `10443` | NAS TCP port mapped to Caddy port `10443` |
-| `CADDY_CERTS_DIR` | `/volume/lore-auth/certs` | NAS certificate directory, required only in manual mode |
-| `LORE_AUTH_URL` | `https://auth.example.com:2234` | Single source for the public URL, JWT issuer, and TLS hostname |
-| `LORE_AUTH_PASSWORD` | Strong password | Creates the root administrator on first start |
-| `LORE_SERVER_URL` | `http://192.168.1.10:41337` | Connects the admin UI to Lore Server; may be empty |
-| `LORE_AUTH_TLS_MODE` | `manual` | `manual` uses existing files; `auto` lets Caddy obtain a certificate |
-
-Start the stack with:
-
-```bash
-docker compose pull
-docker compose up -d
-```
-
-If the NAS interface can import a Compose file, import `compose.yaml` and set
-the environment variables in the UI. No `Caddyfile` upload is required.
-
-In manual mode, place the certificate files in the NAS directory selected by
-`CADDY_CERTS_DIR` and name them `server.pem` and `server.key`.
-
-For automatic certificates, set:
-
-```env
-LORE_AUTH_TLS_MODE=auto
-```
-
-Automatic mode derives the hostname from `LORE_AUTH_URL`, but public port `443`
-must still reach the NAS `LORE_AUTH_HTTPS_PORT` and satisfy ACME validation.
-
-### 1. Prepare the environment
+### 1. Prepare the configuration
 
 ```bash
 cp .env.example .env
@@ -208,84 +82,73 @@ Edit `.env`:
 
 ```env
 LORE_AUTH_URL=https://auth.example.com:10443
-LORE_AUTH_PASSWORD=replace-with-a-strong-password-of-at-least-ten-characters
-LORE_SERVER_URL=http://192.168.1.10:41337
+LORE_AUTH_PASSWORD=replace-with-a-long-random-password
+LORE_SERVER_URL=http://lore-server:41337
 LORE_AUTH_TLS_MODE=manual
+
+LORE_AUTH_DATA_DIR=./data
+CADDY_CERTS_DIR=./certs
+LORE_AUTH_HTTPS_PORT=10443
 ```
 
 | Variable | Required | Description |
 |---|---|---|
-| `LORE_AUTH_URL` | Yes | Complete public URL; also used as JWT issuer and to derive the TLS hostname |
-| `LORE_AUTH_PASSWORD` | On first start | Password used to create root administrator `admin` |
-| `LORE_SERVER_URL` | For repository administration | Internal Lore Server gRPC URL used by the admin console |
-| `LORE_AUTH_TLS_MODE` | No | Defaults to `manual`; may be set to `auto` |
+| `LORE_AUTH_URL` | Yes | Exact HTTPS URL used by clients; also the JWT issuer and the source for the audience and certificate host name |
+| `LORE_AUTH_PASSWORD` | First start | Initial password for bootstrap administrator `admin`; use a strong random value |
+| `LORE_SERVER_URL` | Repository administration | Lore Server gRPC URL used by the web console; may be empty when repository management is not required |
+| `LORE_AUTH_TLS_MODE` | No | `manual` (default) uses existing certificate files; `auto` lets Caddy obtain a certificate |
+| `LORE_AUTH_DATA_DIR` | No | Host persistence directory, default `./data` |
+| `CADDY_CERTS_DIR` | Manual TLS | Host certificate directory, default `./certs` |
+| `LORE_AUTH_HTTPS_PORT` | No | Host TCP port mapped to container port `10443`, default `10443` |
 
-On every start, the bootstrap administrator is restored to an enabled state and
-receives global `urc-*` permissions. This account cannot be disabled or deleted
-from the web console.
+The bootstrap administrator is restored to an enabled state on every start and receives global `urc-*` permissions. It cannot be disabled or deleted from the web console.
 
-### 2. Choose a TLS setup
+### 2. Configure TLS
 
-#### Option A: Caddy obtains a certificate automatically
+#### Manual certificate
 
-The container generates its Caddy configuration from environment variables; no
-external `Caddyfile` is required:
+Set:
+
+```env
+LORE_AUTH_TLS_MODE=manual
+```
+
+Store the complete certificate chain and private key as:
+
+```text
+./certs/server.pem
+./certs/server.key
+```
+
+The certificate must cover the host name in `LORE_AUTH_URL`, and the private key must match the certificate. Compose mounts the certificate directory read-only at `/certs`.
+
+#### Automatic certificate with Caddy
+
+Set:
 
 ```env
 LORE_AUTH_TLS_MODE=auto
 ```
 
-DNS and networking must satisfy Caddy/ACME validation. Public TCP port `443`
-must reach the NAS port mapped to container port `10443`.
+Caddy derives the host name from `LORE_AUTH_URL`. DNS, ingress ports, and firewall rules must satisfy ACME validation. Persist `/caddy-data` and `/caddy-config`; the default `compose.yaml` already defines these volumes.
+
+### 3. Start the service
 
 ```bash
 docker compose pull
 docker compose up -d
 ```
 
-#### Option B: Lucky or another reverse proxy with an existing certificate
-
-Mount the NAS certificate directory at `/certs`, then set:
-
-```env
-LORE_AUTH_TLS_MODE=manual
-```
-
-The certificate must cover the client hostname, include the complete chain, and
-match the private key. The container generates HTTPS and gRPC/h2c routing
-automatically.
-
-If the public address is `https://auth.example.com:2234`, update `.env`:
-
-```env
-LORE_AUTH_URL=https://auth.example.com:2234
-```
-
-Example Lucky backend settings:
-
-```text
-Backend address: https://NAS-LAN-IP:10443
-Ignore backend TLS certificate verification: Yes
-Use secure connection for gRPC: Yes
-Disable persistent connections: No
-```
-
-HTTP/2 must be preserved. If normal web pages work but gRPC returns
-`grpc-status: 14`, Lucky usually does not have **Use secure connection for gRPC**
-enabled.
-
-Common configuration mistakes:
-
-- The certificate directory is not mounted at `/certs`, or the files are not
-  named `server.pem` and `server.key`.
-- Lucky uses `http://NAS:10443` even though Caddy serves HTTPS on port `10443`.
-- Lucky does not preserve HTTP/2, so web pages work but Lore login or
-  authorization checks fail.
-
-### 3. Verify the service
+Check status and logs:
 
 ```bash
 docker compose ps
+docker compose logs --tail=100 lore-auth
+```
+
+Verify the HTTP endpoints:
+
+```bash
 curl https://auth.example.com:10443/health
 curl https://auth.example.com:10443/.well-known/jwks.json
 ```
@@ -296,17 +159,45 @@ The health endpoint should return:
 {"status":"ok"}
 ```
 
-View logs with:
+## Direct Docker Run
+
+Manual-certificate example:
 
 ```bash
-docker compose logs --tail=100 lore-auth
+docker run -d \
+  --name simpleloreauth \
+  --restart unless-stopped \
+  -p 10443:10443 \
+  -e LORE_AUTH_URL=https://auth.example.com:10443 \
+  -e LORE_AUTH_PASSWORD=replace-with-a-long-random-password \
+  -e LORE_SERVER_URL=http://lore-server:41337 \
+  -e LORE_AUTH_TLS_MODE=manual \
+  -v "$PWD/data:/data" \
+  -v "$PWD/certs:/certs:ro" \
+  -v simpleloreauth-caddy-data:/caddy-data \
+  -v simpleloreauth-caddy-config:/caddy-config \
+  ghcr.io/rogue324/simpleloreauth:latest
 ```
+
+The image declares four runtime environment variables so container-management tools can display them directly:
+
+- `LORE_AUTH_URL`.
+- `LORE_AUTH_PASSWORD`.
+- `LORE_SERVER_URL`.
+- `LORE_AUTH_TLS_MODE`.
+
+Other settings use image defaults to avoid duplicated configuration.
 
 ## Configure Lore Server
 
-Merge the contents of `lore-server.local.toml.example` into the local Lore Server
-configuration. All three public URLs must use exactly the same scheme, hostname,
-and port:
+Merge `lore-server.local.toml.example` into the local Lore Server configuration. The following relationship is mandatory:
+
+- `auth_url`: the complete SimpleLoreAuth HTTPS URL.
+- `jwt_issuer`: exactly equal to `LORE_AUTH_URL`, including the scheme and any non-default port.
+- `jwt_audience`: the host name from `LORE_AUTH_URL`, without the scheme, port, or path.
+- JWK `endpoint`: the complete authentication URL followed by `/.well-known/jwks.json`.
+
+Example:
 
 ```toml
 [environment.endpoint]
@@ -320,32 +211,39 @@ jwt_audience = ["auth.example.com"]
 endpoint = "https://auth.example.com:10443/.well-known/jwks.json"
 ```
 
-If the public authentication port is `2234`, change all three URLs to port
-`2234`, then restart Lore Server. Keep `jwt_audience` as the host name only,
-`auth.example.com`, without a scheme or port.
-
-`environment.endpoint.auth_url` is returned to Lore clients and is also used by
-Lore Server for authorization queries. If it is incorrect, client debug logs may
-show:
+SimpleLoreAuth derives the audience automatically from `LORE_AUTH_URL`. In the example above:
 
 ```text
-starting auth session failed to connect to auth endpoint
+LORE_AUTH_URL  = https://auth.example.com:10443
+JWT Issuer     = https://auth.example.com:10443
+JWT Audience   = auth.example.com
 ```
+
+If the legacy advanced variable `LORE_AUTH_AUDIENCE` is set explicitly, it must equal the derived host name. Otherwise, the service refuses to start and reports the expected value. Restart Lore Server after changing its configuration.
+
+## Upstream Reverse Proxy
+
+When placing another reverse proxy in front of the all-in-one container, direct its backend to the container's HTTPS port `10443` and meet these requirements:
+
+- Preserve HTTP/2.
+- Support gRPC long-lived connections and trailers.
+- Do not configure the HTTPS backend as plaintext HTTP.
+- Keep the external address exactly equal to `LORE_AUTH_URL`.
+- Use a certificate that covers the client-facing host name.
+
+If web pages work but gRPC returns `grpc-status: 14`, inspect HTTP/2 and gRPC proxy settings first.
 
 ## Client Login
 
-CLI example:
+Lore CLI example:
 
 ```bash
 lore auth login lore://your-lore-server:41337
 ```
 
-After adding a remote address, Lore Desktop automatically opens the login page.
-The success page displays an authentication success message, and the client then
-stores its token in the local secure credential directory.
+Lore Desktop opens the browser login page after a remote is added. After successful login, the client stores its token in the local credential store.
 
-The admin-console cookie and the Lore Desktop token are independent. Signing in
-to `/admin` does not sign Lore Desktop in.
+The administration cookie and Lore client token are independent. Signing in to `/admin` does not sign Lore Desktop in.
 
 ## Web Administration Console
 
@@ -355,23 +253,17 @@ Open:
 https://auth.example.com:10443/admin
 ```
 
-The console is currently presented in Chinese and supports:
+The console supports:
 
 - Creating, enabling, disabling, and deleting regular users.
 - Resetting user passwords.
 - Viewing user IDs and account status.
 - Granting or revoking per-repository permissions.
 - Viewing Lore Server repositories in real time.
-- Viewing a repository's default branch, creator, creation time, and commit history.
-- Permanently deleting a Lore repository.
+- Viewing repository metadata and recent commits.
+- Permanently deleting Lore repositories.
 
-Repository administration requires:
-
-```env
-LORE_SERVER_URL=http://NAS-LAN-IP:41337
-```
-
-Repository deletion is irreversible. Back up the Lore data directory first.
+Repository administration requires a valid `LORE_SERVER_URL`. Repository deletion is irreversible; verify backups first.
 
 ## Command-Line Administration
 
@@ -399,7 +291,7 @@ docker compose exec \
   lore-auth lore-auth user password alice
 ```
 
-Manage repository permissions:
+Manage repository grants:
 
 ```bash
 docker compose exec lore-auth lore-auth grant set alice \
@@ -414,47 +306,38 @@ docker compose exec lore-auth lore-auth grant revoke alice \
 
 ## Data and Backups
 
-Persistent data is stored in:
+The persistent `/data` directory contains:
 
 ```text
-./data/lore-auth.db
-./data/private-key.pem
-./data/public-key.pem
+lore-auth.db
+jwt-private.pem
 ```
 
-The database contains accounts, password hashes, repository grants, and
-repository-ownership records. The RSA private key signs tokens. Back up the whole
-`data` directory and protect the private key carefully:
+The database stores accounts, password hashes, repository grants, and ownership records. The RSA private key signs tokens. Back up the complete data directory and protect the private key:
 
 - Losing the database loses accounts and grants.
 - Losing the private key invalidates previously issued tokens.
 - Leaking the private key allows an attacker to forge tokens.
 
-`.env`, `data/`, `certs/`, and `target/` are excluded from Git by default.
+Do not run `docker compose down -v` or remove the data directory when data must be retained.
 
 ## Security Notes
 
-- Only the bootstrap super-administrator can use the admin console.
-- Admin sessions are stored in memory and expire after eight hours.
+- Only the bootstrap administrator can access the administration console.
+- Administration sessions are stored in memory and expire after eight hours.
 - Cookies use `Secure`, `HttpOnly`, and `SameSite=Strict`.
-- All administrative forms use CSRF tokens.
+- All administration forms use CSRF tokens.
 - Disabling a user immediately blocks new login and token-exchange attempts.
-- Already-issued JWTs may remain valid until they expire; shorten
-  `LORE_AUTH_TOKEN_TTL_SECONDS` if required.
+- Issued JWTs may remain valid until they expire.
 - Do not expose ports `18080`, `15051`, or the SQLite database to untrusted networks.
 - Avoid granting the global `urc-*` wildcard to regular users.
 
 ## Updating
 
-To update using the prebuilt image:
-
 ```bash
 docker compose pull
 docker compose up -d --force-recreate
 ```
-
-Do not delete the `data` directory and do not run `docker compose down -v` unless
-you intend to remove persistent data or Caddy state.
 
 Build locally only for development or source modifications:
 
@@ -464,24 +347,21 @@ docker compose -f compose.yaml -f compose.build.yaml up -d --build
 
 ## Troubleshooting
 
-### Web pages work, but Lore Server reports `Failed to connect to lore auth service`
+### Lore Server reports `Failed to connect to lore auth service`
 
-Check that:
-
-1. `environment.endpoint.auth_url` is the actual public authentication URL.
-2. The reverse proxy supports HTTP/2 gRPC.
-3. Lucky has **Use secure connection for gRPC** enabled.
-4. Caddy uses `h2c` for its gRPC upstream.
+Check `environment.endpoint.auth_url`, the TLS certificate, network reachability, and HTTP/2 gRPC support in any upstream proxy.
 
 ### Lore Desktop reports `Not authenticated`
 
-Inspect the `authLoginInteractive` debug event. Confirm that browser login
-succeeded and that Lore Server returns the correct `auth_url` port. Admin-console
-login cannot replace client login.
+Inspect the `authLoginInteractive` debug event, confirm that browser login completed, and verify that Lore Server returns the actual authentication URL.
+
+### Lore Server reports `InvalidIssuer` or the client rejects the token
+
+Verify that `jwt_issuer` exactly equals `LORE_AUTH_URL` and that `jwt_audience` contains only the authentication host name. For `https://auth.example.com:10443`, the audience must be `auth.example.com`.
 
 ### SQLite reports `Unable to open the database file`
 
-Ensure that `./data` exists and is writable by the container user:
+Ensure that the data directory exists and is writable by container UID `10001`:
 
 ```bash
 mkdir -p data
@@ -490,8 +370,7 @@ chmod 770 data
 
 ### Caddy TLS handshake fails
 
-Check the certificate mount path, confirm that the certificate matches its
-private key, and name the files `server.pem` and `server.key` under `/certs`.
+Confirm that `/certs/server.pem` contains the complete chain, `/certs/server.key` matches the certificate, and both mounted files are readable.
 
 ## Local Development
 

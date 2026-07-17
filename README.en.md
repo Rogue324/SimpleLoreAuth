@@ -113,14 +113,16 @@ Set:
 LORE_AUTH_TLS_MODE=manual
 ```
 
-Store the complete certificate chain and private key as:
+Place the complete certificate chain and private key in `CADDY_CERTS_DIR`. File names are unrestricted; the container identifies them by extension:
 
 ```text
-./certs/server.pem
-./certs/server.key
+./certs/<any-name>.pem
+./certs/<any-name>.key
 ```
 
-The certificate must cover the host name in `LORE_AUTH_URL`, and the private key must match the certificate. Compose mounts the certificate directory read-only at `/certs`.
+The directory must contain exactly one `.pem` file and one `.key` file; uppercase extensions are also accepted. The container refuses to start with a clear error when no matching file or multiple matching files are found. The certificate must cover the host name in `LORE_AUTH_URL`, and the private key must match the certificate. Compose mounts the certificate directory read-only at `/certs`.
+
+If multiple certificates must remain in the same directory, use the advanced variables `CADDY_CERT_FILE` and `CADDY_KEY_FILE` to select their container paths explicitly.
 
 #### Automatic certificate with Caddy
 
@@ -130,7 +132,16 @@ Set:
 LORE_AUTH_TLS_MODE=auto
 ```
 
-Caddy derives the host name from `LORE_AUTH_URL`. DNS, ingress ports, and firewall rules must satisfy ACME validation. Persist `/caddy-data` and `/caddy-config`; the default `compose.yaml` already defines these volumes.
+Caddy derives the host name from `LORE_AUTH_URL`. DNS, ingress ports, and firewall rules must satisfy ACME validation. Automatically issued certificates and ACME state are stored under `/data/caddy` and persist with `/data`.
+
+### Persistent directories
+
+| Container path | Content | Persistence requirement |
+|---|---|---|
+| `/data` | User database, JWT private key, and automatic TLS state under `/data/caddy` | Always required |
+| `/certs` | Read-only certificate input for manual TLS | Supplied by the host |
+
+Authentication data and Caddy automatic TLS state are different content, but they now share the `/data` persistence root, so a separate `/caddy-data` volume is no longer required. The entry point generates Caddy's configuration on every start and uses a temporary configuration directory, so a persistent `/caddy-config` volume is also unnecessary.
 
 ### 3. Start the service
 
@@ -174,8 +185,6 @@ docker run -d \
   -e LORE_AUTH_TLS_MODE=manual \
   -v "$PWD/data:/data" \
   -v "$PWD/certs:/certs:ro" \
-  -v simpleloreauth-caddy-data:/caddy-data \
-  -v simpleloreauth-caddy-config:/caddy-config \
   ghcr.io/rogue324/simpleloreauth:latest
 ```
 
@@ -370,7 +379,7 @@ chmod 770 data
 
 ### Caddy TLS handshake fails
 
-Confirm that `/certs/server.pem` contains the complete chain, `/certs/server.key` matches the certificate, and both mounted files are readable.
+Confirm that `/certs` contains exactly one readable `.pem` complete certificate chain and one matching `.key` private key. If multiple files of either type are present, remove unrelated files or select the intended files with `CADDY_CERT_FILE` and `CADDY_KEY_FILE`.
 
 ## Local Development
 

@@ -32,9 +32,10 @@ export LORE_AUTH_LOGIN_TTL_SECONDS="${LORE_AUTH_LOGIN_TTL_SECONDS:-300}"
 export LORE_AUTH_LORE_GRPC_URL="${LORE_AUTH_LORE_GRPC_URL:-${LORE_SERVER_URL:-}}"
 export LORE_AUTH_BOOTSTRAP_USERNAME="${LORE_AUTH_BOOTSTRAP_USERNAME:-admin}"
 export LORE_AUTH_BOOTSTRAP_PASSWORD="${LORE_AUTH_BOOTSTRAP_PASSWORD:-${LORE_AUTH_PASSWORD:-}}"
-export XDG_DATA_HOME="${XDG_DATA_HOME:-/caddy-data}"
-export XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-/caddy-config}"
+export XDG_DATA_HOME="${XDG_DATA_HOME:-/data/caddy}"
+export XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-/tmp/caddy-config}"
 export RUST_LOG="${RUST_LOG:-lore_auth=info}"
+mkdir -p "$XDG_DATA_HOME" "$XDG_CONFIG_HOME"
 
 tls_mode="${CADDY_TLS_MODE:-${LORE_AUTH_TLS_MODE:-manual}}"
 case "$tls_mode" in
@@ -48,12 +49,49 @@ case "$tls_mode" in
     tls_directive=""
     ;;
   manual)
-    if [ ! -r "${CADDY_CERT_FILE:-/certs/server.pem}" ] || [ ! -r "${CADDY_KEY_FILE:-/certs/server.key}" ]; then
-      echo "Caddy certificate or key is not readable" >&2
+    cert_dir="${CADDY_CERT_DIR:-/certs}"
+    cert_file="${CADDY_CERT_FILE:-}"
+    if [ -z "$cert_file" ]; then
+      cert_count=0
+      for candidate in "$cert_dir"/*.pem "$cert_dir"/*.PEM; do
+        [ -f "$candidate" ] || continue
+        cert_file="$candidate"
+        cert_count=$((cert_count + 1))
+      done
+      if [ "$cert_count" -eq 0 ]; then
+        echo "No .pem certificate file was found in $cert_dir" >&2
+        exit 1
+      fi
+      if [ "$cert_count" -ne 1 ]; then
+        echo "Multiple .pem certificate files were found in $cert_dir; keep exactly one or set CADDY_CERT_FILE" >&2
+        exit 1
+      fi
+    fi
+
+    key_file="${CADDY_KEY_FILE:-}"
+    if [ -z "$key_file" ]; then
+      key_count=0
+      for candidate in "$cert_dir"/*.key "$cert_dir"/*.KEY; do
+        [ -f "$candidate" ] || continue
+        key_file="$candidate"
+        key_count=$((key_count + 1))
+      done
+      if [ "$key_count" -eq 0 ]; then
+        echo "No .key private-key file was found in $cert_dir" >&2
+        exit 1
+      fi
+      if [ "$key_count" -ne 1 ]; then
+        echo "Multiple .key private-key files were found in $cert_dir; keep exactly one or set CADDY_KEY_FILE" >&2
+        exit 1
+      fi
+    fi
+
+    if [ ! -r "$cert_file" ] || [ ! -r "$key_file" ]; then
+      echo "The selected Caddy certificate or private key is not readable" >&2
       exit 1
     fi
     site="https://:10443"
-    tls_directive="tls ${CADDY_CERT_FILE:-/certs/server.pem} ${CADDY_KEY_FILE:-/certs/server.key}"
+    tls_directive="tls \"${cert_file}\" \"${key_file}\""
     ;;
   *)
     echo "LORE_AUTH_TLS_MODE must be auto or manual" >&2

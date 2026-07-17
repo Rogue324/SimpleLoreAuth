@@ -113,14 +113,16 @@ LORE_AUTH_HTTPS_PORT=10443
 LORE_AUTH_TLS_MODE=manual
 ```
 
-将完整证书链和私钥分别保存为：
+将完整证书链和私钥放入 `CADDY_CERTS_DIR`。文件名可以自定义，容器会按照扩展名自动识别：
 
 ```text
-./certs/server.pem
-./certs/server.key
+./certs/<任意名称>.pem
+./certs/<任意名称>.key
 ```
 
-证书必须覆盖 `LORE_AUTH_URL` 中的域名，私钥必须与证书匹配。Compose 会将证书目录以只读方式挂载到容器 `/certs`。
+目录中必须恰好存在一个 `.pem` 文件和一个 `.key` 文件；扩展名也支持大写形式。检测到零个或多个匹配文件时，容器会拒绝启动并给出明确错误。证书必须覆盖 `LORE_AUTH_URL` 中的域名，私钥必须与证书匹配。Compose 会将证书目录以只读方式挂载到容器 `/certs`。
+
+如同一目录必须保留多个证书，可以使用高级变量 `CADDY_CERT_FILE` 和 `CADDY_KEY_FILE` 显式指定容器内路径。
 
 #### Caddy 自动申请证书
 
@@ -130,7 +132,16 @@ LORE_AUTH_TLS_MODE=manual
 LORE_AUTH_TLS_MODE=auto
 ```
 
-Caddy 会从 `LORE_AUTH_URL` 提取域名。DNS、入口端口和防火墙必须满足 ACME 验证要求，并应持久化 `/caddy-data` 和 `/caddy-config`。默认 `compose.yaml` 已配置对应卷。
+Caddy 会从 `LORE_AUTH_URL` 提取域名。DNS、入口端口和防火墙必须满足 ACME 验证要求。自动签发的证书和 ACME 状态保存在 `/data/caddy`，随 `/data` 一起持久化。
+
+### 持久化目录
+
+| 容器目录 | 内容 | 是否需要持久化 |
+|---|---|---|
+| `/data` | 用户数据库、JWT 私钥，以及 `/data/caddy` 中的自动 TLS 状态 | 始终需要 |
+| `/certs` | 手动 TLS 模式的只读证书输入 | 由宿主机提供 |
+
+认证数据与 Caddy 自动 TLS 状态是不同内容，但统一放在 `/data` 持久化根目录下，不再需要单独的 `/caddy-data` 卷。Caddy 配置由入口脚本在每次启动时生成并使用临时目录，因此也不需要 `/caddy-config` 持久卷。
 
 ### 3. 启动
 
@@ -174,8 +185,6 @@ docker run -d \
   -e LORE_AUTH_TLS_MODE=manual \
   -v "$PWD/data:/data" \
   -v "$PWD/certs:/certs:ro" \
-  -v simpleloreauth-caddy-data:/caddy-data \
-  -v simpleloreauth-caddy-config:/caddy-config \
   ghcr.io/rogue324/simpleloreauth:latest
 ```
 
@@ -370,7 +379,7 @@ chmod 770 data
 
 ### Caddy TLS 握手失败
 
-确认 `/certs/server.pem` 包含完整证书链，`/certs/server.key` 与证书匹配，并检查挂载文件的读取权限。
+确认 `/certs` 中恰好有一个可读取的 `.pem` 完整证书链和一个与之匹配的 `.key` 私钥。如果目录中存在多个同类文件，请删除无关文件或通过 `CADDY_CERT_FILE`、`CADDY_KEY_FILE` 显式选择。
 
 ## 本地开发
 

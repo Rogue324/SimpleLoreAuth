@@ -122,7 +122,7 @@ docker compose up -d
 - `LORE_SERVER_URL`：Lore Server 的内部 gRPC 地址；需要后台仓库管理时填写。
 - `LORE_AUTH_TLS_MODE`：`manual`（默认，使用已有证书）或 `auto`（Caddy 自动申请）。
 
-管理员用户名固定默认为 `admin`，audience 固定默认为 `lore-service`，令牌时长等高级设置使用内置默认值，不再占用 NAS 的启动参数列表。`18080` 和 `15051` 仅供同一容器内的 Caddy 与 Auth 通信，不需要映射到宿主机。
+管理员用户名固定默认为 `admin`。JWT Audience 会自动取 `LORE_AUTH_URL` 的域名部分，不包含协议、端口或路径，例如 `https://auth.example.com:10443` 对应 `auth.example.com`。它必须与 Lore Server 的 `jwt_audience` 完全一致；若通过旧版高级变量显式设置了不一致的 `LORE_AUTH_AUDIENCE`，容器会拒绝启动并提示正确值。令牌时长等其他高级设置使用内置默认值，不再占用 NAS 的启动参数列表。`18080` 和 `15051` 仅供同一容器内的 Caddy 与 Auth 通信，不需要映射到宿主机。
 
 域名、HTTPS 和证书参数也属于同一个 `latest` 容器，不需要再创建单独的 Caddy 容器。
 
@@ -280,13 +280,13 @@ auth_url = "https://auth.example.com:10443"
 
 [server.auth]
 jwt_issuer = "https://auth.example.com:10443"
-jwt_audience = ["lore-service"]
+jwt_audience = ["auth.example.com"]
 
 [server.auth.jwk]
 endpoint = "https://auth.example.com:10443/.well-known/jwks.json"
 ```
 
-如果认证服务实际公网端口是 `2234`，这里三处都必须改为 `2234`。修改后重启 Lore Server。
+如果认证服务实际公网端口是 `2234`，这里三处 URL 都必须改为 `2234`。`jwt_audience` 仍然只填写域名 `auth.example.com`，不包含协议和端口。修改后重启 Lore Server。
 
 `environment.endpoint.auth_url` 会同时提供给 Lore 客户端，并被 Lore Server 用于权限查询。地址写错时，客户端调试日志会出现：
 

@@ -57,8 +57,8 @@ struct ServeArgs {
     public_base_url: String,
     #[arg(long, env = "LORE_AUTH_ISSUER")]
     issuer: String,
-    #[arg(long, env = "LORE_AUTH_AUDIENCE", default_value = "lore-service")]
-    audience: String,
+    #[arg(long, env = "LORE_AUTH_AUDIENCE")]
+    audience: Option<String>,
     #[arg(long, env = "LORE_AUTH_ENVIRONMENT", default_value = "local")]
     environment: String,
     #[arg(long, env = "LORE_AUTH_TOKEN_TTL_SECONDS", default_value_t = 3600)]
@@ -132,6 +132,7 @@ async fn main() -> Result<()> {
         // as empty values in NAS container editors. Treat those empty strings
         // as unset instead of rejecting them as malformed configuration.
         args.lore_grpc_url = non_empty(args.lore_grpc_url.take());
+        args.audience = non_empty(args.audience.take());
         args.bootstrap_username = non_empty(args.bootstrap_username.take());
         args.bootstrap_password = non_empty(args.bootstrap_password.take());
     }
@@ -147,9 +148,25 @@ fn non_empty(value: Option<String>) -> Option<String> {
     value.filter(|value| !value.trim().is_empty())
 }
 
+fn url_host(value: &str) -> Result<String> {
+    let (_, remainder) = value
+        .split_once("://")
+        .context("URL must contain a scheme")?;
+    let authority = remainder.split('/').next().unwrap_or_default();
+    let host = if let Some(ipv6) = authority.strip_prefix('[') {
+        ipv6.split(']').next().unwrap_or_default()
+    } else {
+        authority.split(':').next().unwrap_or_default()
+    };
+    if host.is_empty() {
+        bail!("URL must contain a host");
+    }
+    Ok(host.to_string())
+}
+
 #[cfg(test)]
 mod tests {
-    use super::non_empty;
+    use super::{non_empty, url_host};
 
     #[test]
     fn empty_image_environment_values_are_treated_as_unset() {
@@ -161,10 +178,20 @@ mod tests {
             Some("http://lore-server:41337".to_string())
         );
     }
+
+    #[test]
+    fn audience_host_is_derived_from_the_authentication_url() {
+        assert_eq!(
+            url_host("https://lore.yxbro.com:12235/login").unwrap(),
+            "lore.yxbro.com"
+        );
+        assert_eq!(url_host("https://[::1]:10443").unwrap(), "::1");
+    }
 }
 
 async fn serve(data_dir: PathBuf, db: Database, args: ServeArgs) -> Result<()> {
     validate_serve_args(&args)?;
+    let audience = url_host(&args.public_base_url)?;
     let bootstrap_username = args
         .bootstrap_username
         .clone()
@@ -176,7 +203,7 @@ async fn serve(data_dir: PathBuf, db: Database, args: ServeArgs) -> Result<()> {
     let tokens = TokenIssuer::load_or_create(
         data_dir.join("jwt-private.pem"),
         args.issuer,
-        args.audience,
+        audience,
         args.environment,
         args.token_ttl_seconds,
     )?;
@@ -218,6 +245,14 @@ fn validate_serve_args(args: &ServeArgs) -> Result<()> {
     }
     if args.issuer.trim().is_empty() {
         bail!("issuer must not be empty");
+    }
+    let expected_audience = url_host(&args.public_base_url)?;
+    if let Some(audience) = args.audience.as_deref()
+        && audience != expected_audience
+    {
+        bail!(
+            "audience must match the authentication domain: expected {expected_audience}, got {audience}"
+        );
     }
     if let Some(url) = args.lore_grpc_url.as_deref()
         && !url.starts_with("http://")

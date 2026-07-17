@@ -143,7 +143,7 @@ The image exposes only four runtime settings:
 - `LORE_SERVER_URL`: internal Lore Server gRPC URL, needed for repository administration.
 - `LORE_AUTH_TLS_MODE`: `manual` (default) or `auto`.
 
-The administrator username defaults to `admin`, the audience defaults to `lore-service`, and advanced settings use built-in defaults instead of filling the NAS environment list. Ports `18080` and `15051` are internal only.
+The administrator username defaults to `admin`. JWT Audience is derived automatically from the host name in `LORE_AUTH_URL`, without the scheme, port, or path. For example, `https://auth.example.com:10443` produces `auth.example.com`. It must exactly match Lore Server's `jwt_audience`. If the legacy advanced variable `LORE_AUTH_AUDIENCE` is set to another value, the container refuses to start and reports the expected value. Other advanced settings use built-in defaults instead of filling the NAS environment list. Ports `18080` and `15051` are internal only.
 
 The domain, HTTPS, and certificate settings belong to the same `latest` container; no separate Caddy container is required.
 
@@ -314,14 +314,15 @@ auth_url = "https://auth.example.com:10443"
 
 [server.auth]
 jwt_issuer = "https://auth.example.com:10443"
-jwt_audience = ["lore-service"]
+jwt_audience = ["auth.example.com"]
 
 [server.auth.jwk]
 endpoint = "https://auth.example.com:10443/.well-known/jwks.json"
 ```
 
 If the public authentication port is `2234`, change all three URLs to port
-`2234`, then restart Lore Server.
+`2234`, then restart Lore Server. Keep `jwt_audience` as the host name only,
+`auth.example.com`, without a scheme or port.
 
 `environment.endpoint.auth_url` is returned to Lore clients and is also used by
 Lore Server for authorization queries. If it is incorrect, client debug logs may

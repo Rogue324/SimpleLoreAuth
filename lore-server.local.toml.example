@@ -6,7 +6,7 @@ auth_url = "https://auth.example.com:10443"
 
 [server.auth]
 jwt_issuer = "https://auth.example.com:10443"
-jwt_audience = ["lore-service"]
+jwt_audience = ["auth.example.com"]
 
 [server.auth.jwk]
 endpoint = "https://auth.example.com:10443/.well-known/jwks.json"

@@ -481,7 +481,7 @@ async fn admin_repository_history(
     let Some(endpoint) = state.lore_grpc_url.as_deref() else {
         return admin_error(
             StatusCode::SERVICE_UNAVAILABLE,
-            "尚未配置 LORE_AUTH_LORE_GRPC_URL，无法读取提交历史。",
+            "尚未配置 LORE_SERVER_URL，无法读取提交历史。",
         );
     };
     let client = LoreAdminClient::new(endpoint);
@@ -546,7 +546,7 @@ async fn admin_delete_repository(
         return admin_error(StatusCode::FORBIDDEN, "安全校验失败，请刷新页面后重试。 ");
     }
     let Some(endpoint) = state.lore_grpc_url.as_deref() else {
-        return admin_redirect("error", "尚未配置 LORE_AUTH_LORE_GRPC_URL，不能删除仓库。");
+        return admin_redirect("error", "尚未配置 LORE_SERVER_URL，不能删除仓库。");
     };
     let client = LoreAdminClient::new(endpoint);
     let Ok((token, _)) = state.tokens.issue_authentication(&actor) else {
@@ -631,7 +631,7 @@ async fn render_admin(
     } else {
         (
             Vec::new(),
-            "<p class=\"notice error\">未配置 LORE_AUTH_LORE_GRPC_URL；仓库列表、提交历史和删除功能不可用。</p>".to_string(),
+            "<p class=\"notice error\">未配置 LORE_SERVER_URL；仓库列表、提交历史和删除功能不可用。</p>".to_string(),
         )
     };
     let csrf = escape(&session.csrf_token);

@@ -92,14 +92,10 @@ ghcr.io/rogue324/simpleloreauth:latest
 在 NAS 图形界面中至少配置：
 
 ```env
-LORE_AUTH_PUBLIC_BASE_URL=https://lore.example.com:10443
-LORE_AUTH_ISSUER=https://lore.example.com:10443
-LORE_AUTH_BOOTSTRAP_PASSWORD=replace-with-a-long-random-password
-LORE_AUTH_LORE_GRPC_URL=http://NAS-LAN-IP:41337
-
-CADDY_TLS_MODE=manual
-CADDY_CERT_FILE=/certs/server.pem
-CADDY_KEY_FILE=/certs/server.key
+LORE_AUTH_URL=https://lore.example.com:10443
+LORE_AUTH_PASSWORD=replace-with-a-long-random-password
+LORE_SERVER_URL=http://NAS-LAN-IP:41337
+LORE_AUTH_TLS_MODE=manual
 ```
 
 同时进行以下映射：
@@ -108,7 +104,7 @@ CADDY_KEY_FILE=/certs/server.key
 - NAS 证书目录 → `/certs`，只读；
 - NAS HTTPS 端口（例如 `10443`）→ 容器 TCP `10443`。
 
-证书文件名不同，只需修改 `CADDY_CERT_FILE` 和 `CADDY_KEY_FILE`。如需持久保存 Caddy 自动证书，再映射 `/caddy-data` 和 `/caddy-config`。默认 `compose.yaml` 已经是一体化单容器配置。
+手动证书固定使用 `/certs/server.pem` 和 `/certs/server.key`，因此只需按这两个名称放入映射的 NAS 证书目录。如需持久保存 Caddy 自动证书，再映射 `/caddy-data` 和 `/caddy-config`。默认 `compose.yaml` 已经是一体化单容器配置。
 
 ```bash
 docker compose pull
@@ -119,80 +115,64 @@ docker compose up -d
 
 一体化的 `latest` 镜像已在镜像配置中声明运行参数。NAS 的 Docker 图形界面从镜像创建容器时，会像显示 `PATH` 一样自动列出这些环境变量。具有固定默认值的参数会预填默认值；必须按部署环境填写的参数保持为空。
 
-必须填写的空参数：
+镜像只列出四个启动参数：
 
-- `LORE_AUTH_PUBLIC_BASE_URL`：用户实际访问的 HTTPS 地址。
-- `LORE_AUTH_ISSUER`：JWT 签发者，通常与公网 HTTPS 地址相同。
-- `LORE_AUTH_BOOTSTRAP_PASSWORD`：终极管理员密码；首次启动必须填写。
+- `LORE_AUTH_URL`：用户实际访问的完整 HTTPS 地址；同时作为 JWT issuer，并自动提取证书域名。
+- `LORE_AUTH_PASSWORD`：终极管理员密码；首次启动必须填写。
+- `LORE_SERVER_URL`：Lore Server 的内部 gRPC 地址；需要后台仓库管理时填写。
+- `LORE_AUTH_TLS_MODE`：`manual`（默认，使用已有证书）或 `auto`（Caddy 自动申请）。
 
-通常还需要填写 `LORE_AUTH_LORE_GRPC_URL`，后台仓库管理功能通过它连接 Lore Server。`18080` 和 `15051` 仅供同一容器内的 Caddy 与 Auth 通信，不需要映射到宿主机。
+管理员用户名固定默认为 `admin`，audience 固定默认为 `lore-service`，令牌时长等高级设置使用内置默认值，不再占用 NAS 的启动参数列表。`18080` 和 `15051` 仅供同一容器内的 Caddy 与 Auth 通信，不需要映射到宿主机。
 
 域名、HTTPS 和证书参数也属于同一个 `latest` 容器，不需要再创建单独的 Caddy 容器。
 
 ### NAS 参数化部署（推荐）
 
-`compose.nas.yaml` 面向 NAS Docker 管理界面设计。认证配置、端口、数据目录、TLS 模式和证书位置都可以作为 Docker/Compose 环境变量填写，Caddy 在启动时自动生成配置，不需要创建或挂载 `Caddyfile`。
+统一使用 `compose.yaml`；重复的 `compose.nas.yaml` 已删除。Caddy 在启动时自动生成配置，不需要创建或挂载 `Caddyfile`。
 
 在 NAS 的 Compose 项目环境变量页面填写：
 
 ```env
-LORE_AUTH_IMAGE=ghcr.io/rogue324/simpleloreauth:latest
 LORE_AUTH_DATA_DIR=/path/on/nas/lore-auth/data
 LORE_AUTH_HTTPS_PORT=10443
-
-LORE_AUTH_DOMAIN=auth.example.com
-LORE_AUTH_PUBLIC_BASE_URL=https://auth.example.com:2234
-LORE_AUTH_ISSUER=https://auth.example.com:2234
-LORE_AUTH_AUDIENCE=lore-service
-LORE_AUTH_ENVIRONMENT=home
-LORE_AUTH_TOKEN_TTL_SECONDS=3600
-LORE_AUTH_LORE_GRPC_URL=http://NAS-LAN-IP:41337
-LORE_AUTH_BOOTSTRAP_USERNAME=admin
-LORE_AUTH_BOOTSTRAP_PASSWORD=replace-with-a-long-random-password
-RUST_LOG=lore_auth=info
-
-CADDY_TLS_MODE=manual
 CADDY_CERTS_DIR=/path/on/nas/lore-auth/certs
-CADDY_CERT_FILE=/certs/server.pem
-CADDY_KEY_FILE=/certs/server.key
+
+LORE_AUTH_URL=https://auth.example.com:2234
+LORE_AUTH_PASSWORD=replace-with-a-long-random-password
+LORE_SERVER_URL=http://NAS-LAN-IP:41337
+LORE_AUTH_TLS_MODE=manual
 ```
 
 参数说明：
 
 | 参数 | 示例 | 说明 |
 |---|---|---|
-| `LORE_AUTH_IMAGE` | `ghcr.io/rogue324/simpleloreauth:latest` | 认证服务镜像及标签 |
 | `LORE_AUTH_DATA_DIR` | `/volume/lore-auth/data` | NAS 上保存数据库和 RSA 密钥的目录 |
 | `LORE_AUTH_HTTPS_PORT` | `10443` | NAS 对外映射到 Caddy `10443` 的 TCP 端口 |
-| `CADDY_TLS_MODE` | `manual` | `manual` 使用已有证书；`auto` 由 Caddy 申请证书 |
 | `CADDY_CERTS_DIR` | `/volume/lore-auth/certs` | NAS 上的证书目录，仅手动证书模式需要 |
-| `CADDY_CERT_FILE` | `/certs/server.pem` | Caddy 容器内证书路径，不是 NAS 路径 |
-| `CADDY_KEY_FILE` | `/certs/server.key` | Caddy 容器内私钥路径，不是 NAS 路径 |
+| `LORE_AUTH_URL` | `https://auth.example.com:2234` | 公网地址、JWT issuer 和证书域名的唯一来源 |
+| `LORE_AUTH_PASSWORD` | 强密码 | 首次创建终极管理员时使用 |
+| `LORE_SERVER_URL` | `http://192.168.1.10:41337` | 后台连接 Lore Server；不使用仓库管理可留空 |
+| `LORE_AUTH_TLS_MODE` | `manual` | `manual` 使用已有证书；`auto` 由 Caddy 申请证书 |
 
 启动：
 
 ```bash
-docker compose -f compose.nas.yaml pull
-docker compose -f compose.nas.yaml up -d
+docker compose pull
+docker compose up -d
 ```
 
-如果 NAS 图形界面支持导入 Compose，导入 `compose.nas.yaml` 后在界面中填写上述环境变量即可，不需要上传 `Caddyfile`。
+如果 NAS 图形界面支持导入 Compose，导入 `compose.yaml` 后在界面中填写上述环境变量即可，不需要上传 `Caddyfile`。
 
-手动证书模式需要把证书文件放在 `CADDY_CERTS_DIR` 指向的 NAS 目录中。默认文件名是 `server.pem` 和 `server.key`；若保留其他文件名，只需修改容器内路径，例如：
-
-```env
-CADDY_CERT_FILE=/certs/yxbro.pem
-CADDY_KEY_FILE=/certs/yxbro.key
-```
+手动证书模式需要把证书文件放在 `CADDY_CERTS_DIR` 指向的 NAS 目录中，并命名为 `server.pem` 和 `server.key`。
 
 自动证书模式设置：
 
 ```env
-CADDY_TLS_MODE=auto
-LORE_AUTH_DOMAIN=auth.example.com
+LORE_AUTH_TLS_MODE=auto
 ```
 
-自动模式不使用 `CADDY_CERT_FILE` 和 `CADDY_KEY_FILE`，但公网 `443` 仍必须能够转发到 NAS 的 `LORE_AUTH_HTTPS_PORT` 并满足 ACME 验证条件。
+自动模式会从 `LORE_AUTH_URL` 提取域名，但公网 `443` 仍必须能够转发到 NAS 的 `LORE_AUTH_HTTPS_PORT` 并满足 ACME 验证条件。
 
 ### 1. 准备配置
 
@@ -203,30 +183,20 @@ cp .env.example .env
 编辑 `.env`：
 
 ```env
-LORE_AUTH_DOMAIN=auth.example.com
-LORE_AUTH_PUBLIC_BASE_URL=https://auth.example.com:10443
-LORE_AUTH_ISSUER=https://auth.example.com:10443
-LORE_AUTH_AUDIENCE=lore-service
-LORE_AUTH_ENVIRONMENT=home
-LORE_AUTH_TOKEN_TTL_SECONDS=3600
-LORE_AUTH_LORE_GRPC_URL=http://192.168.1.10:41337
-LORE_AUTH_BOOTSTRAP_USERNAME=admin
-LORE_AUTH_BOOTSTRAP_PASSWORD=请替换为至少十位的高强度密码
+LORE_AUTH_URL=https://auth.example.com:10443
+LORE_AUTH_PASSWORD=请替换为至少十位的高强度密码
+LORE_SERVER_URL=http://192.168.1.10:41337
+LORE_AUTH_TLS_MODE=manual
 ```
 
 变量说明：
 
 | 变量 | 必填 | 说明 |
 |---|---|---|
-| `LORE_AUTH_DOMAIN` | 是 | 证书域名，只写域名，不要带协议、端口或路径 |
-| `LORE_AUTH_PUBLIC_BASE_URL` | 是 | 客户端实际访问的完整公网地址，包含非标准端口 |
-| `LORE_AUTH_ISSUER` | 是 | JWT issuer；必须和 Lore Server 的 `jwt_issuer` 完全一致 |
-| `LORE_AUTH_AUDIENCE` | 否 | JWT audience，默认 `lore-service` |
-| `LORE_AUTH_ENVIRONMENT` | 否 | 写入令牌的环境标识，默认 `local` |
-| `LORE_AUTH_TOKEN_TTL_SECONDS` | 否 | JWT 有效期，默认 3600 秒 |
-| `LORE_AUTH_LORE_GRPC_URL` | 仓库后台需要 | 管理后台连接 Lore Server 的内部 gRPC 地址 |
-| `LORE_AUTH_BOOTSTRAP_USERNAME` | 是 | 终极管理员账号，默认 `admin` |
-| `LORE_AUTH_BOOTSTRAP_PASSWORD` | 首次启动需要 | 首次创建终极管理员时使用的密码 |
+| `LORE_AUTH_URL` | 是 | 客户端公网地址；自动用作 JWT issuer，并从中提取证书域名 |
+| `LORE_AUTH_PASSWORD` | 首次启动需要 | 首次创建终极管理员 `admin` 时使用的密码 |
+| `LORE_SERVER_URL` | 仓库后台需要 | 管理后台连接 Lore Server 的内部 gRPC 地址 |
+| `LORE_AUTH_TLS_MODE` | 否 | 默认 `manual`；也可设为 `auto` |
 
 终极管理员每次启动都会恢复为启用状态，并获得 `urc-*` 全局权限。该账号不能在网页后台被禁用或删除。
 
@@ -237,8 +207,7 @@ LORE_AUTH_BOOTSTRAP_PASSWORD=请替换为至少十位的高强度密码
 容器会根据环境变量自动生成 Caddy 配置，不需要提供 `Caddyfile`：
 
 ```env
-CADDY_TLS_MODE=auto
-LORE_AUTH_DOMAIN=auth.example.com
+LORE_AUTH_TLS_MODE=auto
 ```
 
 域名和网络必须满足 Caddy/ACME 验证要求；公网 TCP `443` 必须能够到达映射到容器 `10443` 的 NAS 端口。
@@ -253,9 +222,7 @@ docker compose up -d
 把 NAS 证书目录映射到容器 `/certs`，然后设置：
 
 ```env
-CADDY_TLS_MODE=manual
-CADDY_CERT_FILE=/certs/server.pem
-CADDY_KEY_FILE=/certs/server.key
+LORE_AUTH_TLS_MODE=manual
 ```
 
 证书必须覆盖客户端访问使用的域名并包含完整证书链，私钥必须与证书匹配。容器会自动生成 HTTPS、普通网页和 gRPC/h2c 分流配置。
@@ -263,8 +230,7 @@ CADDY_KEY_FILE=/certs/server.key
 如果公网使用 `https://auth.example.com:2234`，`.env` 必须相应写成：
 
 ```env
-LORE_AUTH_PUBLIC_BASE_URL=https://auth.example.com:2234
-LORE_AUTH_ISSUER=https://auth.example.com:2234
+LORE_AUTH_URL=https://auth.example.com:2234
 ```
 
 Lucky 后端示例：
@@ -280,7 +246,7 @@ grpc 使用安全连接：是
 
 常见配置错误：
 
-- 证书目录没有映射到 `/certs`，或 `CADDY_CERT_FILE`/`CADDY_KEY_FILE` 写成 NAS 宿主机路径；
+- 证书目录没有映射到 `/certs`，或文件名不是 `server.pem`/`server.key`；
 - Lucky 后端写成 `http://NAS:10443`，而 Caddy 的 `10443` 实际是 HTTPS；
 - Lucky 没有保留 HTTP/2，导致网页正常但 Lore 登录或权限检查失败。
 
@@ -361,7 +327,7 @@ https://auth.example.com:10443/admin
 仓库管理要求配置：
 
 ```env
-LORE_AUTH_LORE_GRPC_URL=http://NAS局域网IP:41337
+LORE_SERVER_URL=http://NAS局域网IP:41337
 ```
 
 删除仓库是不可恢复的硬删除，请先备份 Lore 数据目录。
@@ -477,7 +443,7 @@ chmod 770 data
 
 ### Caddy TLS 握手失败
 
-检查证书目录是否映射到容器 `/certs`、证书与私钥是否匹配，以及 `CADDY_CERT_FILE`/`CADDY_KEY_FILE` 是否使用容器内 `/certs/...` 路径。
+检查证书目录是否映射到容器 `/certs`、证书与私钥是否匹配，并确认文件名为 `server.pem` 和 `server.key`。
 
 ## 本地开发
 

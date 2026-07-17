@@ -138,8 +138,8 @@ impl Database {
             return Ok(());
         }
 
-        let password = password
-            .context("bootstrap administrator does not exist; set LORE_AUTH_BOOTSTRAP_PASSWORD")?;
+        let password =
+            password.context("bootstrap administrator does not exist; set LORE_AUTH_PASSWORD")?;
         let user = self.create_user(username, username, password, true)?;
         self.set_grant(&user.username, "urc-*", &["*".to_string()])?;
         tracing::warn!(

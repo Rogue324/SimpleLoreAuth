@@ -113,14 +113,10 @@ This image runs Lore Auth and Caddy together. They communicate only through `127
 At minimum, configure these values in the NAS UI:
 
 ```env
-LORE_AUTH_PUBLIC_BASE_URL=https://lore.example.com:10443
-LORE_AUTH_ISSUER=https://lore.example.com:10443
-LORE_AUTH_BOOTSTRAP_PASSWORD=replace-with-a-long-random-password
-LORE_AUTH_LORE_GRPC_URL=http://NAS-LAN-IP:41337
-
-CADDY_TLS_MODE=manual
-CADDY_CERT_FILE=/certs/server.pem
-CADDY_KEY_FILE=/certs/server.key
+LORE_AUTH_URL=https://lore.example.com:10443
+LORE_AUTH_PASSWORD=replace-with-a-long-random-password
+LORE_SERVER_URL=http://NAS-LAN-IP:41337
+LORE_AUTH_TLS_MODE=manual
 ```
 
 Add these mappings:
@@ -129,7 +125,7 @@ Add these mappings:
 - NAS certificate directory → `/certs`, read-only.
 - NAS HTTPS port (for example `10443`) → container TCP `10443`.
 
-For different certificate names, change `CADDY_CERT_FILE` and `CADDY_KEY_FILE`. Persist `/caddy-data` and `/caddy-config` when Caddy manages certificates automatically. The default `compose.yaml` is already an all-in-one single-container deployment:
+Manual TLS always reads `/certs/server.pem` and `/certs/server.key`; place the files under those names in the mounted NAS certificate directory. Persist `/caddy-data` and `/caddy-config` when Caddy manages certificates automatically. The default `compose.yaml` is already an all-in-one single-container deployment:
 
 ```bash
 docker compose pull
@@ -140,85 +136,67 @@ docker compose up -d
 
 The all-in-one `latest` image declares its runtime settings in the image configuration. When a NAS Docker UI creates a container from the image, these environment variables are listed automatically in the same way as `PATH`. Settings with stable defaults are pre-filled, while deployment-specific required settings remain empty.
 
-Required empty settings:
+The image exposes only four runtime settings:
 
-- `LORE_AUTH_PUBLIC_BASE_URL`: the public HTTPS URL used by clients.
-- `LORE_AUTH_ISSUER`: the JWT issuer, normally the same public HTTPS URL.
-- `LORE_AUTH_BOOTSTRAP_PASSWORD`: the root administrator password, required on first startup.
+- `LORE_AUTH_URL`: the complete public HTTPS URL; it is also the JWT issuer and the source of the TLS hostname.
+- `LORE_AUTH_PASSWORD`: root administrator password, required on first startup.
+- `LORE_SERVER_URL`: internal Lore Server gRPC URL, needed for repository administration.
+- `LORE_AUTH_TLS_MODE`: `manual` (default) or `auto`.
 
-Normally, also set `LORE_AUTH_LORE_GRPC_URL` so the administration UI can manage Lore Server repositories. Ports `18080` and `15051` are used only by Caddy and Auth inside the same container and must not be published on the host.
+The administrator username defaults to `admin`, the audience defaults to `lore-service`, and advanced settings use built-in defaults instead of filling the NAS environment list. Ports `18080` and `15051` are internal only.
 
 The domain, HTTPS, and certificate settings belong to the same `latest` container; no separate Caddy container is required.
 
 ### Parameterized NAS deployment (recommended)
 
-`compose.nas.yaml` is designed for NAS Docker management interfaces. Authentication
-settings, ports, data directories, TLS mode, and certificate locations are all
-provided as Docker/Compose environment variables. Caddy generates its configuration
-when the container starts, so no `Caddyfile` needs to be created or mounted.
+Use the single `compose.yaml`; the duplicate `compose.nas.yaml` has been removed.
+Caddy generates its configuration when the container starts, so no `Caddyfile`
+needs to be created or mounted.
 
 Set the following values in the NAS Compose project environment-variable page:
 
 ```env
-LORE_AUTH_IMAGE=ghcr.io/rogue324/simpleloreauth:latest
 LORE_AUTH_DATA_DIR=/path/on/nas/lore-auth/data
 LORE_AUTH_HTTPS_PORT=10443
-
-LORE_AUTH_DOMAIN=auth.example.com
-LORE_AUTH_PUBLIC_BASE_URL=https://auth.example.com:2234
-LORE_AUTH_ISSUER=https://auth.example.com:2234
-LORE_AUTH_AUDIENCE=lore-service
-LORE_AUTH_ENVIRONMENT=home
-LORE_AUTH_TOKEN_TTL_SECONDS=3600
-LORE_AUTH_LORE_GRPC_URL=http://NAS-LAN-IP:41337
-LORE_AUTH_BOOTSTRAP_USERNAME=admin
-LORE_AUTH_BOOTSTRAP_PASSWORD=replace-with-a-long-random-password
-RUST_LOG=lore_auth=info
-
-CADDY_TLS_MODE=manual
 CADDY_CERTS_DIR=/path/on/nas/lore-auth/certs
-CADDY_CERT_FILE=/certs/server.pem
-CADDY_KEY_FILE=/certs/server.key
+
+LORE_AUTH_URL=https://auth.example.com:2234
+LORE_AUTH_PASSWORD=replace-with-a-long-random-password
+LORE_SERVER_URL=http://NAS-LAN-IP:41337
+LORE_AUTH_TLS_MODE=manual
 ```
 
 | Parameter | Example | Description |
 |---|---|---|
-| `LORE_AUTH_IMAGE` | `ghcr.io/rogue324/simpleloreauth:latest` | Authentication service image and tag |
 | `LORE_AUTH_DATA_DIR` | `/volume/lore-auth/data` | NAS directory containing the database and RSA keys |
 | `LORE_AUTH_HTTPS_PORT` | `10443` | NAS TCP port mapped to Caddy port `10443` |
-| `CADDY_TLS_MODE` | `manual` | `manual` uses an existing certificate; `auto` lets Caddy obtain one |
 | `CADDY_CERTS_DIR` | `/volume/lore-auth/certs` | NAS certificate directory, required only in manual mode |
-| `CADDY_CERT_FILE` | `/certs/server.pem` | Certificate path inside the Caddy container, not a NAS path |
-| `CADDY_KEY_FILE` | `/certs/server.key` | Private-key path inside the Caddy container, not a NAS path |
+| `LORE_AUTH_URL` | `https://auth.example.com:2234` | Single source for the public URL, JWT issuer, and TLS hostname |
+| `LORE_AUTH_PASSWORD` | Strong password | Creates the root administrator on first start |
+| `LORE_SERVER_URL` | `http://192.168.1.10:41337` | Connects the admin UI to Lore Server; may be empty |
+| `LORE_AUTH_TLS_MODE` | `manual` | `manual` uses existing files; `auto` lets Caddy obtain a certificate |
 
 Start the stack with:
 
 ```bash
-docker compose -f compose.nas.yaml pull
-docker compose -f compose.nas.yaml up -d
+docker compose pull
+docker compose up -d
 ```
 
-If the NAS interface can import a Compose file, import `compose.nas.yaml` and set
+If the NAS interface can import a Compose file, import `compose.yaml` and set
 the environment variables in the UI. No `Caddyfile` upload is required.
 
 In manual mode, place the certificate files in the NAS directory selected by
-`CADDY_CERTS_DIR`. The default names are `server.pem` and `server.key`. To keep
-different names, change only the paths inside the container:
-
-```env
-CADDY_CERT_FILE=/certs/example.pem
-CADDY_KEY_FILE=/certs/example.key
-```
+`CADDY_CERTS_DIR` and name them `server.pem` and `server.key`.
 
 For automatic certificates, set:
 
 ```env
-CADDY_TLS_MODE=auto
-LORE_AUTH_DOMAIN=auth.example.com
+LORE_AUTH_TLS_MODE=auto
 ```
 
-Automatic mode ignores `CADDY_CERT_FILE` and `CADDY_KEY_FILE`, but public port
-`443` must still reach the NAS `LORE_AUTH_HTTPS_PORT` and satisfy ACME validation.
+Automatic mode derives the hostname from `LORE_AUTH_URL`, but public port `443`
+must still reach the NAS `LORE_AUTH_HTTPS_PORT` and satisfy ACME validation.
 
 ### 1. Prepare the environment
 
@@ -229,28 +207,18 @@ cp .env.example .env
 Edit `.env`:
 
 ```env
-LORE_AUTH_DOMAIN=auth.example.com
-LORE_AUTH_PUBLIC_BASE_URL=https://auth.example.com:10443
-LORE_AUTH_ISSUER=https://auth.example.com:10443
-LORE_AUTH_AUDIENCE=lore-service
-LORE_AUTH_ENVIRONMENT=home
-LORE_AUTH_TOKEN_TTL_SECONDS=3600
-LORE_AUTH_LORE_GRPC_URL=http://192.168.1.10:41337
-LORE_AUTH_BOOTSTRAP_USERNAME=admin
-LORE_AUTH_BOOTSTRAP_PASSWORD=replace-with-a-strong-password-of-at-least-ten-characters
+LORE_AUTH_URL=https://auth.example.com:10443
+LORE_AUTH_PASSWORD=replace-with-a-strong-password-of-at-least-ten-characters
+LORE_SERVER_URL=http://192.168.1.10:41337
+LORE_AUTH_TLS_MODE=manual
 ```
 
 | Variable | Required | Description |
 |---|---|---|
-| `LORE_AUTH_DOMAIN` | Yes | Certificate hostname only; do not include a scheme, port, or path |
-| `LORE_AUTH_PUBLIC_BASE_URL` | Yes | Complete public URL used by clients, including a non-standard port |
-| `LORE_AUTH_ISSUER` | Yes | JWT issuer; must exactly match Lore Server's `jwt_issuer` |
-| `LORE_AUTH_AUDIENCE` | No | JWT audience; defaults to `lore-service` |
-| `LORE_AUTH_ENVIRONMENT` | No | Environment identifier stored in tokens; defaults to `local` |
-| `LORE_AUTH_TOKEN_TTL_SECONDS` | No | JWT lifetime in seconds; defaults to `3600` |
-| `LORE_AUTH_LORE_GRPC_URL` | For repository administration | Internal Lore Server gRPC URL used by the admin console |
-| `LORE_AUTH_BOOTSTRAP_USERNAME` | Yes | Super-administrator username; defaults to `admin` |
-| `LORE_AUTH_BOOTSTRAP_PASSWORD` | On first start | Password used to create the super-administrator account |
+| `LORE_AUTH_URL` | Yes | Complete public URL; also used as JWT issuer and to derive the TLS hostname |
+| `LORE_AUTH_PASSWORD` | On first start | Password used to create root administrator `admin` |
+| `LORE_SERVER_URL` | For repository administration | Internal Lore Server gRPC URL used by the admin console |
+| `LORE_AUTH_TLS_MODE` | No | Defaults to `manual`; may be set to `auto` |
 
 On every start, the bootstrap administrator is restored to an enabled state and
 receives global `urc-*` permissions. This account cannot be disabled or deleted
@@ -264,8 +232,7 @@ The container generates its Caddy configuration from environment variables; no
 external `Caddyfile` is required:
 
 ```env
-CADDY_TLS_MODE=auto
-LORE_AUTH_DOMAIN=auth.example.com
+LORE_AUTH_TLS_MODE=auto
 ```
 
 DNS and networking must satisfy Caddy/ACME validation. Public TCP port `443`
@@ -281,9 +248,7 @@ docker compose up -d
 Mount the NAS certificate directory at `/certs`, then set:
 
 ```env
-CADDY_TLS_MODE=manual
-CADDY_CERT_FILE=/certs/server.pem
-CADDY_KEY_FILE=/certs/server.key
+LORE_AUTH_TLS_MODE=manual
 ```
 
 The certificate must cover the client hostname, include the complete chain, and
@@ -293,8 +258,7 @@ automatically.
 If the public address is `https://auth.example.com:2234`, update `.env`:
 
 ```env
-LORE_AUTH_PUBLIC_BASE_URL=https://auth.example.com:2234
-LORE_AUTH_ISSUER=https://auth.example.com:2234
+LORE_AUTH_URL=https://auth.example.com:2234
 ```
 
 Example Lucky backend settings:
@@ -312,8 +276,8 @@ enabled.
 
 Common configuration mistakes:
 
-- The certificate directory is not mounted at `/certs`, or
-  `CADDY_CERT_FILE`/`CADDY_KEY_FILE` contains a NAS host path.
+- The certificate directory is not mounted at `/certs`, or the files are not
+  named `server.pem` and `server.key`.
 - Lucky uses `http://NAS:10443` even though Caddy serves HTTPS on port `10443`.
 - Lucky does not preserve HTTP/2, so web pages work but Lore login or
   authorization checks fail.
@@ -403,7 +367,7 @@ The console is currently presented in Chinese and supports:
 Repository administration requires:
 
 ```env
-LORE_AUTH_LORE_GRPC_URL=http://NAS-LAN-IP:41337
+LORE_SERVER_URL=http://NAS-LAN-IP:41337
 ```
 
 Repository deletion is irreversible. Back up the Lore data directory first.
@@ -525,9 +489,8 @@ chmod 770 data
 
 ### Caddy TLS handshake fails
 
-Check the certificate mount paths, confirm that the certificate matches its
-private key, and ensure that `CADDY_CERT_FILE` and `CADDY_KEY_FILE` use
-`/certs/...` paths inside the container.
+Check the certificate mount path, confirm that the certificate matches its
+private key, and name the files `server.pem` and `server.key` under `/certs`.
 
 ## Local Development
 
